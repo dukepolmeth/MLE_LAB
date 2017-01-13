@@ -129,3 +129,5 @@ incorrect/10000
 
 ```
 
+
+Slides from today can be found [here](http://www2.stat.duke.edu/~cr173/Sta523_Fa14/slides/2014-09-03-data_struct.html#1). You can also find a wonderful post on R data structures [here](http://adv-r.had.co.nz/Data-structures.html). Happy hunting.
