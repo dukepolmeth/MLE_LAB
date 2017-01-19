@@ -71,7 +71,7 @@ summary(mod1)
 
 ## Handmade OLS Estimator
 
-Now let's build an OLS estimator from scratch to estimate the regression we just did.
+Now let's build an OLS estimator from scratch to estimate the regression we just did with `lm()`.
 
 ```{r eval=F}
 lm(deaths75ln ~ upper20 + energypcln + intensep + sanctions70ln + sanctions75ln + deaths70ln, 
@@ -88,21 +88,20 @@ $$\hat{\beta} = (X'X)^{-1}X'Y$$
 
 Some matrix operation commands in R will be helpful:
 
-```{r, eval=F}
-as.matrix() changes an object to the class 'matrix'.
+- `as.matrix()` changes an object to the class 'matrix'.
 
-t() transposes a matrix, which is basically a reflection using the diagonal as an axis, 
-and is denoted by an apostrophe in matrix notation.
+- `t()` transposes a matrix, which is basically a reflection using the diagonal as an axis, and is denoted by an apostrophe in matrix notation (ex. $X'X$ is the transpose of X multiplied by X).
 
-%*% performs matrix multiplication.
+- `%*%` performs matrix multiplication.
 
-solve() takes the inverse of a matrix.
-```
+- `solve()` takes the inverse of a matrix.
+
+
+### Estimate coefficients
 
 Now we can find the coefficients, so that $\hat{\beta}$ minimizes the sum of squared residuals.
 
-
-But first, we have to delete missing values from the relevant variables. NOTE: lm() will do this automatically, but what we're building right now isn't that sophisticated. ALSO IMPORTANT: When you're doing your own work, don't just drop observations automatically. Think about how it matters for each case.
+But first, we have to delete missing values from the relevant variables. NOTE: `lm()` will do this automatically, but what we're building right now isn't that sophisticated. ALSO IMPORTANT: When you're doing your own work, don't just drop observations automatically. Think about how it matters for each case.
 
 ```{r, message=F}
 ## Drop NAs for variables
@@ -114,19 +113,19 @@ msrep <- msrep[!((is.na(msrep$energypcln) | is.na(msrep$intensep) |
 
 We deleted 33 observations, the same as lm(). I also cheated a bit, in that I already knew which of the relevant variables had missing values.
 
-### Estimate coefficients
 
 Back to our regularly scheduled programming...
 
 ```{r, message=F}
-## Make IV and DV matrices for this regression
+## Make IV and DV matrices
 X <- as.matrix(cbind(1, msrep$upper20, msrep$energypcln, msrep$intensep,
                      msrep$sanctions70ln, msrep$sanctions75ln, 
                      msrep$deaths70ln)) #Why the 1?
 Y <- as.matrix(msrep$deaths75ln) #Do we need as.matrix() here?
 
-bhat <- round( solve( t(X)%*%X ) %*% t(X)%*%Y, digits= 3 )
 
+## Compute the coefficient estimates
+bhat <- round( solve( t(X)%*%X ) %*% t(X)%*%Y, digits= 3 )
 
 ```
 
@@ -187,7 +186,7 @@ p.vals <- round(rbind(2*pt(abs(bhat[1]/stdErr[1]), df=n-k, lower.tail=F),
 print(model <- cbind(model, p.vals)) #What does print() do here?
 ```
 
-How does this compare to the model from the lm() function?
+How does this compare to the model from the `lm()` function?
 
 ```{r}
 summary(mod1)
@@ -213,7 +212,7 @@ This is the most important of the mathematical assumptions for a linear model, a
 
 Oh god. How do I test for this?
 
-Luckily for all of us, linear models in R come with diagnostics in their output to test for violations of linearity. Simply plot() the model object:
+Luckily for all of us, linear models in R come with diagnostics in their output to test for violations of linearity. Simply `plot()` the model object:
 
 ```{r, eval=F}
 plot(mod1)
