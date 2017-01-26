@@ -61,7 +61,7 @@ olsForm <- formula(
   paste0('deaths75ln ~ ', 
          paste(ivs, collapse=' + ') ) 
   )
-mod1 <- lm(olsForm, data=msrep)
+summary(mod1 <- lm(olsForm, data=msrep))
 ```
 
 ```{r}
