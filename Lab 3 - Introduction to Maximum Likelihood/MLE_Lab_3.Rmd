@@ -200,6 +200,7 @@ like.vals <- likelihood.Bernoulli(theta.vals, x)
 plot(theta.vals, like.vals, type="b", col="blue", lwd=2,
      main="Bernoulli Likelihood for x=(0,1,0,1,0,1)")
 abline(v=0.5, lty=2)
+
 ```
 
 
