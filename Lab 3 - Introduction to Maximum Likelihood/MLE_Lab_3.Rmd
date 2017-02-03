@@ -81,15 +81,15 @@ msrepBiRegData <- na.omit(msrep[,c('deaths75ln', 'upper20', 'sanctions75ln')])
 cor(msrepBiRegData)
 
 # Estimate coefficients
-coeftest( lm(deaths75ln ~ upper20 + sanctions75ln, data=msrepBiRegData) )
+summary( lm(deaths75ln ~ upper20 + sanctions75ln, data=msrepBiRegData) )
 
 # If we excluded sanctions75ln from the model what would you expect of the
 # coefficient on upper20
-coeftest( lm(deaths75ln ~ upper20, data=msrepBiRegData) )
+summary( lm(deaths75ln ~ upper20, data=msrepBiRegData) )
 
 # If we excluded upper20 from the model what would you expect of the
 # coefficient on sanctions75ln
-coeftest( lm(deaths75ln ~ sanctions75ln, data=msrepBiRegData) )
+summary( lm(deaths75ln ~ sanctions75ln, data=msrepBiRegData) )
 
 # More complicated model
 ivs <- c('upper20', 'energypcln', 'intensep', 
@@ -160,7 +160,7 @@ lrtest(mod1, mod2)
 
 Let's look at the Bernoulli likelihood function:
 
-$$ f(X, \theta) = (\theta)^x*(1-\theta)^{1-x}  $$
+$$ f(X, \theta) = \theta^{(\sum x)}*(1-\theta)^{n- \sum x}  $$
 
 ```{r}
 #
@@ -179,19 +179,19 @@ likelihood.Bernoulli <- function(theta, x) {
   return(ans)
 }
 
-# plot Bernoulli likelihood (x = c(0,0,0,0,0))
-x <- rep(0,5)
+# plot Bernoulli likelihood (x = c(0,0,0,0,0,0))
+x <- rep(0,6)
 theta.vals <- seq(0,1, length.out=11)
 like.vals <- likelihood.Bernoulli(theta.vals, x)
 plot(theta.vals, like.vals, type="b", col="blue", lwd=2,
-     main="Bernoulli Likelihood for x=(0,0,0,0,0)")
+     main="Bernoulli Likelihood for x=(0,0,0,0,0,0)")
 abline(v=0, lty=2)
 
-# plot Bernoulli likelihood (x = c(1,1,1,1,1))
-x <- rep(1,5)
+# plot Bernoulli likelihood (x = c(1,1,1,1,1,1))
+x <- rep(1,6)
 like.vals <- likelihood.Bernoulli(theta.vals, x)
 plot(theta.vals, like.vals, type="b", col="blue", lwd=2,
-     main="Bernoulli Likelihood for x=(1,1,1,1,1)")
+     main="Bernoulli Likelihood for x=(1,1,1,1,1,1)")
 abline(v=1, lty=2)
 
 # plot Bernoulli likelihood (x = c(0, 1, 0, 1, 0, 1))
@@ -248,7 +248,7 @@ set.seed(123)
 x <- rnorm(n, mean=0, sd=1)
 
 # compute normal likelihood as function of mu
-mu.vals <- seq(-1,1, length.out=10001)
+mu.vals <- seq(-1,1, length.out=101)
 like.vals <- rep(0,length(mu.vals))
 for (i in 1:length(like.vals)) {
   like.vals[i] <- likelihood.normal.mu(mu.vals[i], sig2=1, x=x)
@@ -257,7 +257,7 @@ for (i in 1:length(like.vals)) {
 plot(mu.vals, like.vals, type="l", col="blue", lwd=2)
 abline(v=0, col="red", lwd=2)
 mean(x)
-
+abline(v=mean(x) , lty=2)
 ```
 
 ## Regression with MLE
@@ -305,8 +305,8 @@ m1$converged
 	
 ###################################################
 ### GLM function
-m2 <- glm(lfp ~ age + lwg + inc, data=data, family=binomial(link="logit"))
-summary(m2)
+summary(m2 <- glm(lfp ~ age + lwg + inc, data=data, family=binomial(link="logit")))
+
 ###################################################
 	
 ```
