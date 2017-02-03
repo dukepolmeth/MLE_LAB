@@ -1,0 +1,301 @@
+---
+title: 'MLE: Lab 4'
+author: "Andy Ballard"
+date: "February 3, 2017"
+header-includes:
+   - \usepackage{multirow}
+   - \usepackage{dcolumn}
+output: 
+  pdf_document:
+    fig_caption: yes
+---
+
+
+
+THINGS TO TALK ABOUT:
+SPATIAL/SERIAL AUTOCORRELATION
+HOW TO BETTER DESCRIBE VCOV FOR MLE
+SAMPLING DISTRIBUTIONS AND CLM
+BOOTSTRAPPING
+
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
+  source(paste0(path.expand("~"), "/MLE_LAB/Lab 4 - Autocorrelation and Properties of MLE/setup.R"))
+}
+```
+
+# Autocorrelation (most of this is cobbled together from a variety of sites I like)
+
+## What is it?
+
+There are times, especially in time-series data, that the CLR assumption of  $$corr(\epsilon_t, \epsilon_{t-1})=0$$  is broken. This is known in econometrics as Serial Correlation or Autocorrelation. This means that  $$corr(\epsilon_t, \epsilon_{t-1}) \ne 0$$  and there is a pattern across the error terms. The error terms are then not independently distributed across the observations and are not strictly random.
+
+Positive autocorrelation example:
+
+<div style="text-align:center">
+![Positive Autocorrelation](http://upload.wikimedia.org/wikibooks/en/b/bd/Autocorrelation_1.JPG)
+</div>
+
+Negative autocorrelation example: 
+
+<div style="text-align:center">
+![Negative Autocorrelation](http://upload.wikimedia.org/wikibooks/en/9/9f/Autocorrelation_2.JPG)
+</div>
+
+When the error term is related to the previous error term, it can be written in an algebraic equation.  $$\epsilon_t = \rho \epsilon_{t-1} + u_t$$  where $\rho$ is the autocorrelation coefficient between the two disturbance terms, and $u$ is the disturbance term for the autocorrelation. This is known as an Autoregressive Process. $$-1< \rho = corr(\epsilon_t, \epsilon_{t-1}) < 1$$ The $u$ is needed within the equation because although the error term is less random, it still has a slight random effect.
+
+## Dealing with autocorrelation
+
+To deal with autocorrelation we can try a number of things. They are the beyond scope of this class for now, but I recommend that you test for it at least.
+
+## Causes
+
+* Besides, three factors can also lead to serially correlated errors. They are: (1) omitted variables, (2) ignoring nonlinearities, and (3) measurement errors. For example, suppose a dependent variable $Y_t$ is related to the independent variables $X_{t1}$ and $X_{t2}$, but the investigator does not include $X_{t2}$ in the model. The effect of this variable will be captured by the error term $\epsilon_t$ . Because many time series exhibit trends over time, $X_{t2}$ is likely to depend on $X_{t-1,2}, X_{t-2,2}, \ldots$ This will translate into apparent correlation between $\epsilon_t$ and $\epsilon_{t-1}, \epsilon{t-2}, \ldots$, thereby violating the serial independence assumption. Thus, growth in omitted variables could cause autocorrelation in errors.
+
+* Serial correlation can also be caused by misspecification of the functional form. Suppose, for example, the relationship between Y and X is quadratic but we assume a straight line. Then the error term $\epsilon_t$ will depend on $X^2$ . If X has been growing over time, $\epsilon_t$ will also exhibit such growth, indicating autocorrelation.
+
+* Example: Consider stock market data. The price of a particular security or a stock market index at the close of successive days or during successive hours is likely to be serially correlated.
+
+* Example: Consider the consumption of electricity during different hours of the day. Because the temperature patterns are similar between successive time periods, we can expect consumption patterns to be correlated between neighboring periods. If the model is not properly specified, this effect may show up as high correlation among errors from nearby periods.
+
+* Systematic errors in measurement can also cause autocorrelation. For example, suppose a firm is updating its inventory in a given period. If there is a systematic error in the way it was measured, cumulative inventory stock will reflect accumulated measurement errors. This will show up as serial correlation.
+
+## Consequences
+
+* Coefficients are still unbiased $E(\epsilon_t) = 0$, $cov(X_t, u_t) = 0$
+
+* True variance of  $\hat{\beta}$  is increased, by the presence of autocorrelations.
+
+* Estimated variance of  $\hat{\beta}$  is smaller due to autocorrelation (biased downward).
+
+* A decrease in  se($\hat{\beta}$)  and an increase of the t-statistics; this results in the estimator looking more accurate than it actually is.
+
+* $R^2$ becomes inflated.
+
+# Spatial Autocorrelation
+
+Same issues as serial correlation. 
+
+* Example: The city of St. Paul has a spike of crime and so they hire additional police. The following year, they found that the crime rate decreased significantly. Amazingly, the city of Minneapolis, which had not adjusted its police force, finds that they have a increase in the crime rate over the same period.
+
+## Moran's statistic
+
+Moran's I is a measure of spatial autocorrelation--how related the values of a variable are based on the locations where they were measured.
+
+To calculate Moran's I, we will need to generate a matrix of inverse distance weights.  In the matrix, entries for pairs of points that are close together are higher than for pairs of points that are far apart.
+
+```{r, results='hide'}
+# Load a helpful dataset
+load(paste0(labPath, '/panel.rda'))
+
+# Finding distances
+capdist=distmatrix(as.Date('2000-1-1'), type='capdist', tolerance=0.5, useGW=FALSE)
+capdist[1:5, 1:5]
+
+# lets see if we can calculate Moran's I for FDI
+# lets focus on 2000 data
+fdi=wbData[which(wbData$year == 2000), c('cname', 'iso3c', 'fdi')]
+fdi=na.omit(fdi)
+
+# Lets match countries with values in distance matrix
+# First we need to get ccodes for the fdi dataset because that is what is used
+# in our distance matrix
+fdi$ccode=panel$ccode[match(toupper(fdi$cname), panel$cname)]
+
+# Some countries did not match, lets just drop 'em
+sum(is.na(fdi$ccode))
+fdi=na.omit(fdi)
+
+# Reorder rows of fdi dataframe
+fdi=fdi[order(fdi$ccode),]
+
+# Now lets isolate the fdi and capdist matrix to only 
+# countries that exist in both objects
+matches=intersect(fdi$ccode, rownames(capdist))
+fdi=fdi[which(fdi$ccode %in% matches),]
+capdist=capdist[matches, matches]
+
+# Like the example above we have to invert the distance matrix
+invcapdist = 1/capdist
+diag(invcapdist) = 0
+
+# Now lets Moran's test
+Moran.I(fdi$fdi, invcapdist)
+```
+
+Some fancy stuff. Spatial statistics is a huge field. If you're interested in it follow the work of Roger Bivand.
+
+```{r, results='hide'}
+# More fancy stuff
+# Could also use spdep to make the Moran's plot
+cshp00 = cshp(date=as.Date('2000-1-1'), useGW=TRUE)
+
+# Remove polygons from cshp00
+cshp00 = cshp00[which(cshp00$COWCODE %in% matches),]
+
+# Centroid coordinates
+coords=coordinates(cshp00)
+
+# Get list of neighbors
+cshp00nb=poly2nb(cshp00, queen=TRUE)
+cshp00nbBin=nb2listw(cshp00nb, style="W", zero.policy=TRUE)
+
+# Plot centroid connections
+plot(cshp00nbBin,coords=coords,pch=19, cex=0.1, col="gray")
+
+# Moran test again
+moran.test(fdi$fdi, listw=cshp00nbBin, zero.policy=T)
+geary.test(fdi$fdi, listw=cshp00nbBin, zero.policy=T)
+
+# Moran plot
+moran.plot(fdi$fdi, listw=cshp00nbBin, zero.policy=T, pch=16, col="black",cex=.5, quiet=F, labels=as.character(fdi$cname),xlab="FDI", ylab="FDI (Spatial Lag)", main="Moran Scatterplot")
+```
+
+## Map Visualizations using cshapes
+
+```{r, results='hide', echo=FALSE}
+# Load some data
+gpclibPermit()
+
+# map of the world
+cshp12 = cshp(date=as.Date('2012-1-1'), useGW=TRUE)
+plot(cshp12)
+
+# Lets work with Pakistan
+pakCode=countrycode('Pakistan', 'country.name', 'cown')
+pakMap = cshp12[cshp12$COWCODE==pakCode,]
+plot(pakMap)
+
+# What is the structure of this data
+names(attributes(cshp12))
+head(attributes(cshp12)$data)
+
+# Lets make a cooler plot
+setwd(labPath)
+load('panel.rda') # inputs df named 'panel'
+load("cityTotPopLatLongvFinal.rda") # inputs df named 'fYrCty'
+prioData=read.csv("ConflictSite 4-2010_v3 Dataset.csv")
+
+# Clean prio data
+prioData$Conflict.territory=char(prioData$Conflict.territory)
+prioData$Conflict.territory[prioData$Conflict.territory=='Yugoslavia']='Serbia'
+prioData$Conflict.territory[prioData$Conflict.territory=='DRC']='Democratic Republic of Congo'
+prioData$cname=countrycode(prioData$Conflict.territory, 'country.name','country.name')
+cntries=unique(prioData$cname)
+
+# Color Non-Conflict countries
+worldmap=cshp(as.Date('2000-1-1'))
+worldmap$CNTRY_NAME=char(worldmap$CNTRY_NAME)
+worldmap$CNTRY_NAME[worldmap$CNTRY_NAME=='Congo, DRC']='Congo, Democratic Republic of'
+Wcntries=worldmap$CNTRY_NAME
+Wcntries=panel$cname[match(Wcntries, panel$CNTRY_NAME)]
+noConfCntries=setdiff(Wcntries, toupper(cntries))
+mapColors=rep('white',length(Wcntries))
+mapColors[which(Wcntries %in% noConfCntries)] = 'grey'
+
+# Plot
+plot(worldmap, col=mapColors)
+points(fYrCty$cleanLong, fYrCty$cleanLat, col='blue', pch=18, cex=0.5)
+points(prioData$Longitude,prioData$Latitude, col='red', pch=16,cex=0.5)
+```
+
+Lets focus in on conflict over time in India.
+
+```{r}
+load("cityTotPopLatLongvFinal.rda")
+prio=read.csv("ConflictSite 4-2010_v3 Dataset.csv")
+
+fYrCty$cname = toupper( countrycode(
+  fYrCty$cname,"country.name","country.name") )
+prio$Conflict.territory = toupper( countrycode(
+	prio$Conflict.territory,"country.name","country.name") )
+
+cname="INDIA"
+worldmap=cshp(date=as.Date("1990-01-01"),useGW=F)
+ccode = countrycode(cname,"country.name","cown")
+cntryShape = worldmap[worldmap$COWCODE==ccode,]
+newprio = na.omit(prio[prio$Conflict.territory==cname,])
+
+gpclibPermit()
+ggmap = fortify(cntryShape, region = "COWCODE")
+ggmapData = data.frame("id" = unique(ggmap$id))
+ggmapData$id = as.numeric(as.character(ggmapData$id))
+
+temp = ggplot(ggmapData, aes(map_id = id))
+temp = temp + geom_map(map=ggmap, fill='white', 
+  linetype=1, colour='black') + expand_limits(x = ggmap$long, y = ggmap$lat) 
+temp = temp + geom_point(aes(
+	x=fYrCty$cleanLong[fYrCty$cname==cname & fYrCty$Capital==0], 
+	y=fYrCty$cleanLat[fYrCty$cname==cname & fYrCty$Capital==0]), 
+	pch=17,size=4,col='darkgrey')
+temp = temp + geom_point(aes(
+	x=fYrCty$cleanLong[fYrCty$cname==cname & fYrCty$Capital!=0], 
+	y=fYrCty$cleanLat[fYrCty$cname==cname & fYrCty$Capital!=0]), 
+	pch=18,size=5,col='darkgrey')
+temp = temp + geom_point(aes(x=newprio$Longitude, y=newprio$Latitude,
+	color=newprio$Year),size=4)
+temp = temp + scale_colour_gradient('',
+	low=brewer.pal(9,'Blues')[2],high=brewer.pal(9,'Blues')[9],
+	breaks=seq(min(newprio$Year),max(newprio$Year),6))
+temp = temp + theme(
+  line=element_blank(),title=element_blank(),
+  axis.text.x=element_blank(),axis.text.y=element_blank(),
+  legend.position='top', legend.key.width=unit(4,"line"),
+  panel.grid.major=element_blank(), 
+  panel.grid.minor=element_blank(), panel.border=element_blank())
+temp
+```
+
+## Constructing spatially weighted regression coefficients
+
+```{r, results=FALSE}
+spatialBuild <- function(spatList, varData, years, variable, sp_suffix='sp_', invert=FALSE){
+  varData <- varData
+	spatData <- NULL
+
+	for(i in 1:length(years)){
+		spatMat <- spatList[[i]]
+		# rownames for matrices
+		distNames <- as.numeric(rownames(spatMat))
+		ndistNames <- panel$ccode[match(distNames, panel$GWCODE)]
+		rownames(spatMat) <- ndistNames; colnames(spatMat) <- ndistNames
+
+		# Invert
+		if(invert){spatMat <- 1/spatMat; spatMat[spatMat==Inf] <- 0}
+
+		# Applying row standardized weights
+		dmatDenom <- apply(spatMat,1,sum)
+		dmatDenom[dmatDenom==0] <- 1
+		spatMat_rowst <- spatMat/dmatDenom
+		
+		# Bringing in fdi dataset
+		spat_vars <- c('ccode', variable)
+		dataYear <- varData[varData$year==years[i], spat_vars]
+		dataYear <- dataYear[which(dataYear$ccode %in% ndistNames),]
+		o <- as.character(dataYear$ccode)
+		
+		spatMat_rowst <- spatMat_rowst[o,o]
+		# data rows with NAs that are in distance matrix
+		# this is equivalent to just dropping them from teh 
+		# spatial variable calculation
+		dataYear[is.na(dataYear)] <- 0
+		
+		for(j in 1:nrow(spatMat_rowst)){
+			row_weights <- NULL
+			row_weights <- t(t(dataYear[,c(2:ncol(dataYear))]) %*%  spatMat_rowst[j,])
+			row_weights2 <- NULL
+			row_weights2 <- cbind(row_weights, years[i], dataYear$ccode[j])
+			spatData <- rbind(spatData, row_weights2)
+		}
+	print(years[i])}
+	spatData <- data.frame(spatData, row.names=NULL)
+
+	names(spatData) <- c(
+		paste(sp_suffix,names(spatData)[1:(length(spat_vars)-1)],sep=''),
+		'year','ccode')
+	spatData$cyear <- paste(spatData$ccode, spatData$year, sep='') 
+	spatData
+}
+```
