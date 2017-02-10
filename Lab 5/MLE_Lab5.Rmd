@@ -451,9 +451,9 @@ ggRibbData <- data.frame(rbind(
 
 # Lets add the confidence intervals to our plot
 interaction.plot.w.CIs <- interaction.plot
-interaction.plot.w.CIs=interaction.plot.w.CIs + geom_ribbon(data=ggRibbData, alpha=0.5,
+interaction.plot.w.CIs <- interaction.plot.w.CIs + geom_ribbon(data=ggRibbData, alpha=0.5,
                         aes(fill=factor(Muslim), ymin=lwr, ymax=upr, x=Income))
-interaction.plot.w.CIs=interaction.plot.w.CIs + scale_fill_discrete(guide='none')
+interaction.plot.w.CIs <- interaction.plot.w.CIs + scale_fill_discrete(guide='none')
 interaction.plot.w.CIs
 ```
 
