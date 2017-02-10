@@ -1,0 +1,461 @@
+---
+title: "MLE - Lab 5"
+author: "Andy Ballard"
+header-includes:
+   - \usepackage{multirow}
+   - \usepackage{dcolumn}
+output: 
+  pdf_document:
+    fig_caption: yes
+---
+
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
+  source(paste0(path.expand("~"), "/MLE_LAB/Lab 5/setup.R"))
+}
+```
+
+## To-Do
+
+* Read .dta files in R
+* What is expected value and why do I care?
+* Estimate linear model via MLE by hand
+* Interaction Effects
+
+
+
+# Loading Stata files in R
+
+Much of the data you'll find in the wild is not in a format native to R (.Rdata), or even in a format that automatically plays nice with multiple platforms (e.g. .csv). Much of the data you'll work with is in .dta format, which is native to Stata, the most popular statistical software for economists and their ilk. So how do we read Stata files in R?
+
+First, you'll have to load the `foreign` package:
+
+```{r}
+library(foreign)
+```
+
+Then, use the `read.dta()` command:
+
+```{r}
+corruption <- read.dta(paste0(labPath, "corruption.dta"))
+```
+
+As we can see, it's about the same syntax as some of the other ways we've read data into R. This is one of the data sets you'll be using for your homework this week, so it's a good idea to get this working.
+
+
+
+
+# Expected value
+
+What is expected value?
+
+Let's start with a random variable. The expected value of that variable is the sum of all possible values, each multipled by the probability it occurs. 
+
+Say a basketball player, who has a lifetime free throw percentage of $70\%$, takes 10 free throws. What is the expected number of free throws made?
+
+For this, we take the expected value of a Bernoulli random variable we will call FT, where the probability of making the shot is $p=0.70$, or $P(FT=1)=0.70$. Now, for a Bernoulli random variable, the expected value $E(X)$ is equal to $p$. Here's why:
+
+For a Bernoulli distributed random variable $X$ with $Pr(X=1) = p$ and $Pr(X=0) = (1-p) = q$, $E[X] = p*1 + q*0 = p$. We got this by multiplying the possible values $\{1,0\}$ by their corresponding probability of occuring $\{p,q\}$.
+
+Back to our friend, the baller. For a single free-throw, the expected number of free throws made is equal to the probability of success, $p$, which is 0.70. If there are 10 free throw attempts, the expected number of free throws made is $10*E(FT) = 10*0.70 = 7$. Note that the expected value does NOT have to be a value that is possible to happen in the real world. If $p$ were instead $0.65$, then the expected number of free throws made out of 10 would be $6.5$.
+
+## Expected value of the normal distribution
+
+The Bernoulli distribution is discrete. That is, each of its possible values are countable. We can have 0, or we can have 1; that's it. Thus, finding the expected value is as simple as knowing the probability of success.
+
+The Normal distribution, on the other hand, is continuous. There are infinitely many values that a normally distributed random variable can take, so we can't find the expected value simply by directly summing up all the possible values and multiplying each by its probability of occurring. Instead, we need to take an integral. Here is our normal distribution pdf:
+
+$$f(x|\mu, \sigma^2) = \frac{1}{\sqrt{2\sigma^2\pi}}exp(-\frac{(x-\mu)^2}{2\sigma^2})$$
+
+For this example we're going to use the standard normal distribution, which is a friendlier version of the normal distribution where $\mu=0$ and $\sigma^2=1$. We can rewrite the pdf as:
+
+$$f(x) = \frac{1}{\sqrt{2\pi}}exp(-\frac{1}{2}x^2)$$
+
+Just as the expected value of a Bernoulli random variable is $p$ the probability of success, the expected value of a normal random variable is the mean, $\mu$. So for the case of a standard normal distribution that is a function of $x$, $E(x)=0$. How might we prove that? Well, we have to take the integral over the "support" of the function. A function's support is all the possible values it can take. For the Bernoulli distribution, that's just $\{0,1\}$. For the normal distribution, that's all real numbers (written as $x \in \mathbf{R}$). Thus, we have to take our integral from $-\infty$ to $\infty$. Just like the Bernoulli, we're taking all the possible values $x$ and multiplying them by their probability to occur, given by the pdf $f(x)$. This gives us a general form for the expected value of a continuous distribution where the support is bounded by {a,b} (for the normal distribution, $a=-\infty$ and $b=\infty$) :
+
+$$E[x] = \int_{a}^{b}xf(x)dx $$
+Which in this case can be rewritten as:
+
+$$E[x] = \int_{-\infty}^{\infty}x (2\pi)^{-\frac{1}{2}}exp(-\frac{1}{2}x^2)dx $$
+And now we only have to do the integral
+
+$$\begin{aligned}
+E[x] &= \int_{-\infty}^{\infty}x (2\pi)^{-\frac{1}{2}}exp(-\frac{1}{2}x^2)dx\\
+& = (2\pi)^{-\frac{1}{2}}\int_{-\infty}^{0}x*exp(-\frac{1}{2}x^2)dx + 2(\pi)^{-\frac{1}{2}}\int_{0}^{\infty}x* exp(-\frac{1}{2}x^2)dx \\
+& = (2\pi)^{-\frac{1}{2}}\Big[-exp(-\frac{1}{2}x^2)\Big]_{-\infty}^{0} + (2\pi)^{-\frac{1}{2}}\Big[-exp(-\frac{1}{2}x^2)\Big]_{0}^{\infty} \\
+& = (2\pi)^{-\frac{1}{2}}[-1 + 0] + (2\pi)^{-\frac{1}{2}}[0+1] \\
+& = (2\pi)^{-\frac{1}{2}} - (2\pi)^{-\frac{1}{2}} \\
+& = 0\\
+\end{aligned}$$
+
+Ta da!
+
+
+## Variance
+
+The variance is also defined in relation to expected value. 
+
+$$Var[x] = E[x^2] - E[x]^2$$
+
+For the standard normal distribution, $\sigma^2 = Var[x] = 1$, which we can show by finding $E[x]^2$ and $E[x^2]$. If $E[x] = 0$, then $E[x]^2 = 0$. $E[x^2]$ is calculated just like $E[x]$, but with $x^2$ instead of $x$:
+
+$$E[x^2] = \int_{-\infty}^{\infty}x^2f(x)dx$$
+
+This integral is even longer than the last one, so I'll spare you computing it here (you can look it up online if you're really interested). Just trust me that $E[x^2] = 1$ so that $Var[x] = E[x^2] - E[x]^2 = 1 - 0 = 1$, since $\sigma^2=1$ is the variance of the standard normal distribution.
+
+
+# Simple linear model (OLS analog) in MLE by hand
+
+Usually, we think of MLE being used for binary, ordinal, or categorical outcome variables, but the framework is flexible enough to run many other types of models. For instance, you can run an MLE version of a simple linear model (OLS).
+
+## Islam & Authoritarianism
+
+Fish (2002) argues that predominantly Muslim societies are distinctly disadvantaged in democratization. To test this he regresses Freedom House scores (`fhrev`) on an Islamic religious tradition variable (`muslim`) that takes the value of one when a country is predominantly Muslim and zero otherwise. He also goes on to add a number of additional controls for level of development (`income`), sociocultural division (`elf`), economic growth (`growth`), British colonial heritage (`britcol`), Communist heritage (`postcom`), and OPEC membership (`opec`). 
+
+We'll run his full model later (and add a twist), but for now let's focus on a simple bivariate relationship: the effect of development levels (`income`) on Freedom House scores (`fhrev`).
+
+```{r, echo=FALSE}
+# Load data
+fishPath <- paste0(labPath, "fish.RData")
+load(fishPath) # loads object named fish to environment
+
+```
+
+First, we can fit the model using least squares regression.
+
+```{r}
+summary(fish.m1 <- lm(fhrev ~ income, data=fish))
+
+plot(fish$income, fish$fhrev)
+abline(fish.m1, col="red")
+```
+
+Looks like a pretty solid linear relationship, which the model bears out. We have a highly significant coefficient for `income` and a reasonable $R^2$ value ($0.35$).
+
+Now let's see if we can get the same results using MLE.
+
+```{r}
+# First, put the data into matrices for the MLE procedure
+x <- cbind(1,as.matrix(fish$income)) #intercepts are fun, we like incercepts
+y <- as.matrix(fish$fhrev)
+ones <- x[,1]
+ 
+# Calculate number of parameters to estimate (K) and number of observations (n)
+K <- ncol(x)
+K1 <- K + 1
+n <- nrow(x)
+
+# Define the function to be optimized
+ 
+llik.regress <- function(par,X,Y) {
+Y <- as.vector(y)
+X <- as.matrix(x)
+xbeta <- X%*%par[1:K]
+Sig <- par[K1:K1]
+  sum(-(1/2)*log(2*pi)-(1/2)*log(Sig^2)-(1/(2*Sig^2))*(y-xbeta)^2) #Normal, y'all
+}
+ 
+# Now let's use the above function to estimate the model.
+ 
+model <- optim(c(-2,0,2),llik.regress, method = "BFGS", control = list(trace=1,maxit=100,fnscale = -1),
+      hessian = TRUE)
+model #Why are there 3 parameter estimates? Sigma!
+
+summary(fish.m1)
+```
+
+Notice that the coefficients from this model are the same as those produced through OLS estimation. Now let's get the variances, standard errors, and Z statistics from our model.
+
+```{r}
+
+ 
+# Calculate the variance matrix from the Hessian matrix. 
+ 
+v <- -solve(model$hessian)
+v
+ 
+# Calculate the standard errors from the variance matrix.
+ 
+se <- sqrt(diag(v))
+se
+summary(fish.m1)$coefficients[,2]
+
+
+# Calculate the z statistics from the coefficients and standard errors
+ 
+b <- model$par
+b
+zstat <-b/se
+zstat
+ 
+# Calculate p-values for the z statistics
+p.vals <- 2 * (1 - pnorm(abs(zstat)))
+p.vals
+ 
+# Put the results together in a table.
+table <- cbind(b, se, zstat, p.vals)
+table
+
+summary(fish.m1)$coefficients 
+```
+
+Why are the p-values slightly different? (normal distribution vs t distribution). This is just another reason p-values by themselves are silly: they're not fixed, and partially based on a distribution you choose!
+
+```{r}
+# Note that the estimate of the error variance is biased by n/n-K
+# we can correct the preceding estimate of the standard error of #estimates as follows
+Sig <- model$par[3]
+Sig
+Sigunb <- sqrt(n/(n-K)*Sig^2)
+Sigunb #Same as the residual standard error
+```
+
+
+
+# Interaction Effects
+
+A conditional hypothesis is one in which a relationship between two or more variables depends on the value of one or more other variables. Examples:
+
+* An increase in X is associated with an increase in Y when condition Z is met, but not when condition Z is absent.
+* X has a positive effect on Y that gets stronger as Z increases.
+
+## Back to the Fish data
+
+We will rerun the model from his paper and run one of our own that includes an interaction term between Islamic religious tradition and level of economic development. Our hypothesis is that higher levels of economic development should be associated with higher Freedom House scores for non-Muslim countries, but that same relationship should not hold for Muslim countries. 
+
+```{r}
+#Fish Model 4, Dep: fhrev. Indep: muslim, income, opec
+lm1 <- lm(fhrev ~ muslim + income + elf + growth + britcol + postcom + opec, data=fish)
+round(summary(lm1)$coefficients,3)
+
+# Add interaction between muslim and income
+lm2 <- lm(fhrev ~ muslim*income + elf + growth + britcol + postcom + opec, data=fish)
+round(summary(lm2)$coefficients,3)
+
+
+
+# Did adding the interaction improve the fit of the model?
+# Lets check using the RMSE
+rmse <- function(mod){ sqrt(mean(resid(mod)^2)) }
+print(paste0('RMSE under Model without the Ineraction Term: ', round(rmse(lm1),3)))
+print(paste0('RMSE under Model with the Ineraction Term: ', round(rmse(lm2),3)))
+
+# Lets use some of the other diagnostics we have learned as well
+
+# R^2
+print(paste0("Adjusted R^2 under model without interaction term: ", round(summary(lm1)$adj.r.square, 3)))
+print(paste0("Adjusted R^2 under model with interaction term: ", round(summary(lm2)$adj.r.square, 3)))
+
+# F test
+anova(lm1, lm2)
+# Likelihood Ratio test
+lrtest(lm1, lm2)
+```
+
+The r-squared, F-test, and the Likelihood Ratio test indicate that we should include the interaction term, but the RMSE suggests it may not improve model fit TOO much.
+
+## Interpretation
+
+When interpreting the effects of a covariate we need to keep the conditional relationship in mind. In Fish's original model, to interpret the effect of a one unit change in income on Freedom House scores we would just note that $\beta_{income}$ equaled `r round(coef(lm1)['income'],2)`.  
+
+After incorporating the interaction effect, however, it is no longer as straightforward because: 
+
+$$\frac{\partial fhrev}{\partial income} = \hat\beta_{income} + \hat\beta_{muslim:income} \times muslim$$
+
+We can see that now the effect of income on Freedom House scores is contingent on the value of $\beta_{muslim:income}$ and `muslim`. If `muslim` equals zero, the effect of income on Freedom House scores can be understood through just $\beta_{income}$, but if muslim equals one then the effect of income is measured through $\beta_{income} + \beta_{muslim:income}$.
+
+The necessity of taking the interactive relationship into account is also true for how we estimate the effect of a country having an Islamic religous tradition as well. 
+
+$$\frac{\partial fhrev}{\partial muslim} = \hat\beta_{muslim} + \hat\beta_{muslim:income} \times income$$
+
+The best way to understand an interactive effect is through a visualization, so lets do that now. On the y-axis, we will have predicted FH scores, and on the x-axis we will have the range of income values in the Fish dataset. To incorporate the Muslim variable, we will use two different colored lines to show the conditional effect of a country having an Islamic religious tradition.
+
+```{r, echo=FALSE, include=TRUE, warning=FALSE, fig.width=9, fig.height=5, fig.cap='Interactive Effect of Economic Development and Religious Tradition on Democracy'}
+# scenario 1: include all values of income, muslim=1, other vars at central tendency
+attach(fish)
+incomeRange <- sort(income)
+scen1 <- cbind(1, 1, incomeRange, mean(elf), mean(growth), median(britcol), median(postcom), median(opec), 1*incomeRange)
+detach(fish)
+
+# scenario 2: include all values of income, muslim=0, other vars at central tendency
+attach(fish)
+scen2=cbind(1, 0, incomeRange, mean(elf), mean(growth), median(britcol), median(postcom), median(opec), 0*incomeRange)
+detach(fish)
+
+# Pull out relevant regression parameters
+coefs <- coef(lm2)
+
+# Calculate y hats
+yhatScen1 <- scen1 %*% coefs
+yhatScen2 <- scen2 %*% coefs
+
+# Create dataframe for plotting
+ggData <- data.frame( rbind(
+  cbind(Income=incomeRange, FH=yhatScen1, Muslim=1),
+  cbind(Income=incomeRange, FH=yhatScen2, Muslim=0) ) )
+colnames(ggData)[2] <- 'FH'
+
+# Reshape data
+interaction.plot <- ggplot()
+# Plotting our predicted values
+interaction.plot <- interaction.plot + geom_line(data=ggData, aes(x=Income, y=FH, color=factor(Muslim)))
+# Lets incorporate the actual data as well
+interaction.plot <- interaction.plot + geom_point(data=fish, aes(x=income, y=fhrev, color=factor(muslim)))
+# Relabel legend items
+interaction.plot <- interaction.plot + scale_color_discrete(breaks=c(0,1), labels=c('Non-Muslim', 'Muslim'))
+# Relabel y-axis
+interaction.plot <- interaction.plot + scale_y_continuous(name='Freedom House Ratings \n (1=Least Free to 7=Most Free)', 
+                             limits=c(.9,7.1), breaks=seq(1, 7, 2), expand=c(0,0))
+# Relabel x-axis
+interaction.plot <- interaction.plot + scale_x_continuous(name='Economic development \n (log GDP per capita in 1990)',
+                             limits=c(2,4.7), breaks=seq(2,5,.5), expand=c(0,0))
+# Clean up plot
+interaction.plot <- interaction.plot + theme(legend.position='top', legend.title=element_blank(), 
+                axis.ticks=element_blank(), panel.border=element_blank(),
+                axis.title.y=element_text(vjust=2))
+interaction.plot
+```
+
+
+## Are these Marginal Effects Significant?
+
+In the figure above, we have done a pretty decent job in showing how our interactive effect works in predicting FH scores across the different values of economic development and religious tradition. However, before we can fully understand the substantive meaning of this interaction effect we also need to take into account the standard errors around the interactive effect. This will help us to answer the question of whether marginal effect of our covariate is significant. 
+
+From above we know that: 
+
+$$\frac{\partial fhrev}{\partial income} = \hat\beta_{income} + \hat\beta_{muslim:income} \times muslim$$
+
+Lets denote the `muslim` variable by $M$ and `income` by $I$, then we can express the variance of $\frac{\partial fhrev}{\partial income}$ as:
+
+$$\begin{aligned}
+Var(\frac{\partial fhrev}{\partial I}) &= Var(\hat\beta_{I} + \beta_{M:I} \times M) \\
+&= Var(\hat\beta_{I}) + Var(\hat\beta_{M:I} \times M) + 2 Cov(\hat\beta_{I}, \beta_{M:I} \times M) \\
+&= Var(\hat\beta_{I}) + M^2 \, Var(\hat\beta_{M:I}) + 2 \, M \, Cov(\hat\beta_{I}, \beta_{M:I} )
+\end{aligned}$$
+
+
+
+Now lets do a simple numerical example for how to get a confidence interval around the marginal effect. Before we can start we need to get the necessary parameter values, specifically, we need the coefficient estimates, variances, and covariances. We can find each of these by using the variance-covariance martix from our regression results, we can access this matrix by calling the `vcov` function on our model:
+
+```{r}
+round(vcov(lm2)[c('muslim','income','muslim:income'),c('muslim','income','muslim:income')],4)
+```
+
+The diagnoals of this matrix are filled with the variance estimates of our regressions and the off-diagnoals their covariances. From this matrix we can pull out the necessary information we need to calculate the confidence interval around the marginal effect of income on FH scores.
+
+Marginal effect of Income on FH scores when muslim = 0: $\hat\beta_{I} + \hat\beta_{M:I} \times 0$ = `r round(coef(lm2)['income'],2)` + `r round(coef(lm2)['muslim:income'],2)` $\times$ 0 = `r round(coef(lm2)['income'] + coef(lm2)['muslim:income'] * 0,2)`
+
+Corresponding standard error: $\sqrt{ var(\hat\beta_{I}) }$ = $\sqrt{`r round(vcov(lm2)['income','income'],4)`}$ = `r round(sqrt(vcov(lm2)['income','income']),2)`
+
+Marginal effect of Income on FH scores when muslim = 1: $\hat\beta_{I} + \hat\beta_{M:I} \times 1$ = `r round(coef(lm2)['income'],2)` + `r round(coef(lm2)['muslim:income'],2)` $\times$ 1 = `r round(coef(lm2)['income'] + coef(lm2)['muslim:income'] * 1,3)`
+
+Corresponding standard error: 
+
+$\sqrt{ var(\hat\beta_{I}) + M^{2} var(\hat\beta_{M:I}) + 2 M cov(\hat\beta_{I}, \hat\beta_{M:I})}$ = $\sqrt{`r round(vcov(lm2)['income','income'],4)`} + `r 1*round(vcov(lm2)['muslim:income','muslim:income'],4)` + 2 \times`r round(vcov(lm2)['income','muslim:income'],4)`$ = `r round(sqrt(vcov(lm2)['income','income'] + vcov(lm2)['muslim:income','muslim:income'] + 2 * vcov(lm2)['income','muslim:income']),2)`
+
+
+From this information we can now answer the question that we started with this section. To calculate the 95% confidence interval, we follow the same procedure as always: 
+
+Upper 95% CI for marginal effect of income when muslim=0: `r round(coef(lm2)['income'],2)` + 1.96 $\times$ `r round(sqrt(vcov(lm2)['income','income']),2)` = `r round(coef(lm2)['income'] + 1.96*sqrt(vcov(lm2)['income','income']),2)`
+
+Lower 95% CI for marginal effect of income when muslim=0: `r round(coef(lm2)['income'],2)` - 1.96 $\times$ `r round(sqrt(vcov(lm2)['income','income']),2)` = `r round(coef(lm2)['income'] - 1.96*sqrt(vcov(lm2)['income','income']),2)`
+
+Upper 95% CI for marginal effect of income when muslim=1: `r round(coef(lm2)['income'] + coef(lm2)['muslim:income'],2)` + 1.96 $\times$ `r round(sqrt(vcov(lm2)['income','income'] + vcov(lm2)['muslim:income','muslim:income'] + 2 * vcov(lm2)['income','muslim:income']),2)` = `r round(coef(lm2)['income'] + coef(lm2)['muslim:income'] + 1.96*sqrt(vcov(lm2)['income','income'] + vcov(lm2)['muslim:income','muslim:income'] + 2 * vcov(lm2)['income','muslim:income']),2)`
+
+Lower 95% CI for marginal effect of income when muslim=1: `r round(coef(lm2)['income'] + coef(lm2)['muslim:income'],2)` - 1.96 $\times$ `r round(sqrt(vcov(lm2)['income','income'] + vcov(lm2)['muslim:income','muslim:income'] + 2 * vcov(lm2)['income','muslim:income']),2)` = `r round(coef(lm2)['income'] + coef(lm2)['muslim:income'] - 1.96*sqrt(vcov(lm2)['income','income'] + vcov(lm2)['muslim:income','muslim:income'] + 2 * vcov(lm2)['income','muslim:income']),2)`
+
+Our conclusion from this is that the marginal effect of income on Freedom House scores is significant at a 95% confidence interval when muslim equals zero and not significant at that interval when muslim equals one. 
+
+However, tables are boring lets make a plot to illustrate this result, specifically what is known as a marginal effects plot. The interpretation of this plot is quick and easy, the marginal effect of income on democracy is significant for non-Muslim countries but it is not significant for Muslim countries.
+
+
+```{r, echo=FALSE, include=TRUE, warning=FALSE, fig.width=9, fig.height=5, fig.cap='Marginal Effect of Income on Democracy at Levels of Muslim'}
+# Lets calculate a vector of marginal effects
+muslimRange <- c(0,1)
+effects <- coefs['income'] + coefs['muslim:income']*muslimRange
+
+# Lets calculate the standard error
+ses <- sqrt( vcov(lm2)['income','income'] + muslimRange^2*vcov(lm2)['muslim:income','muslim:income'] + 2*muslimRange*vcov(lm2)['income','muslim:income'] )
+
+# Lets get the 95% confidence intervals
+upper <- effects + 1.96*ses
+lower <- effects - 1.96*ses
+
+# Lets combine all this into a dataframe
+ggEffect <- data.frame(muslimRange, effects, ses, upper, lower)
+
+# Lets plot this
+incomeEffect <- ggplot(ggEffect, aes(x=factor(muslimRange), y=effects, ymin=lower, ymax=upper))
+incomeEffect <- incomeEffect + geom_linerange() + geom_point()
+incomeEffect <- incomeEffect + geom_hline(aes(yintercept=0), color='red', linetype=2)
+incomeEffect
+```
+
+
+Now lets do this same analysis to assess the signifiance of the marginal effect of muslim on Freedom House scores at the varying levels of income in the Fish dataset. 
+
+Also notice that this analysis would not lend itself to a tabular format as the income variable is continuous. Our conclusion from the analysis shown in this figure is that the marginal effect of the muslim variable on democracy is not significant at low levels of income but it is significant at higher levels.
+
+```{r, echo=FALSE, include=TRUE, warning=FALSE, fig.width=9, fig.height=5, fig.cap='Marginal Effect of Muslim on Democracy at Varying Levels of Income'}
+# Lets calculate a vector of marginal effects
+effects <- coefs['muslim'] + coefs['muslim:income']*incomeRange
+
+# Lets calculate the standard error
+ses <- sqrt( vcov(lm2)['muslim','muslim'] + incomeRange^2*vcov(lm2)['muslim:income','muslim:income'] + 2*incomeRange*vcov(lm2)['muslim','muslim:income'] )
+
+# Lets get the 95% confidence intervals
+upper <- effects + 1.96*ses
+lower <- effects - 1.96*ses
+
+# Lets combine all this into a dataframe
+ggEffect <- data.frame(incomeRange, effects, ses, upper, lower)
+
+# Lets plot this
+muslimEffect <- ggplot(ggEffect, aes(x=incomeRange, y=effects, ymin=lower, ymax=upper))
+muslimEffect <- muslimEffect + geom_ribbon(fill='grey') + geom_line()
+muslimEffect <- muslimEffect + geom_hline(aes(yintercept=0), color='red', linetype=2)
+muslimEffect <- muslimEffect + geom_rug(sides='b', position='jitter')
+muslimEffect
+```
+
+
+I find that marginal effect plots are useful to an extent but I prefer thinking of the interactive relationship in a holistic sense that allows us to directly relate the scenarios we are modeling to the dependent variable. 
+
+To do this we're going to bring back the plot that we started with and add some confidence intervals to it. What you can see here is that the piecemeal information we were capturing from the two separate marginal effect plots is all captured in one here. 
+
+First notice that the predicted democracy scores for Muslim countries across income levels is pretty much flat, indicating that higher levels of income do not have a significant effect on democracy for Muslim countries. 
+
+Second, notice that at low levels of income the predicted democracy scores for Muslim and non-Muslim countries overlap, and they only begin to distinguish themselves at higher levels of income.
+
+Thus we have summarized all the information that was in the marginal effect plots into one neater looking plot -- or at least it looks neater to me. 
+
+
+```{r, echo=FALSE, include=TRUE, warning=FALSE, fig.width=9, fig.height=5, fig.cap='Interactive Effect with Confidence Intervals of Economic Development and Religious Tradition on Democracy'}
+# First let's organize the values
+scen1 <- data.frame(scen1)
+scen2 <- data.frame(scen2)
+colnames(scen1) <- colnames(model.matrix(lm2))
+colnames(scen2) <- colnames(model.matrix(lm2))
+
+# Calculate y hats with confidence intervals
+yhatScen1 <- predict(lm2, newdata=scen1, interval='confidence')
+yhatScen2 <- predict(lm2, newdata=scen2, interval='confidence')
+
+# Lets combine these results into a dataframe so that we can
+## add them to our plot
+ggRibbData <- data.frame(rbind(
+  cbind(Income=incomeRange, Muslim=1, yhatScen1),
+  cbind(Income=incomeRange, Muslim=0, yhatScen2) ), row.names=NULL )
+
+# Lets add the confidence intervals to our plot
+interaction.plot.w.CIs <- interaction.plot
+interaction.plot.w.CIs=interaction.plot.w.CIs + geom_ribbon(data=ggRibbData, alpha=0.5,
+                        aes(fill=factor(Muslim), ymin=lwr, ymax=upr, x=Income))
+interaction.plot.w.CIs=interaction.plot.w.CIs + scale_fill_discrete(guide='none')
+interaction.plot.w.CIs
+```
+
+
+
