@@ -107,7 +107,8 @@ g <- function(k) {
 a <- sapply(1:7, g)
 a*4
 ```
-These are reasonably close, but we can do better with more iterations
+
+These are reasonably close, but we can do better with more iterations. As you can see above, the estimates get better as we go from left to right. That's because each is doing $10^k$ estimates, and we're varying $k$ from 1 to 7. 
 
 ```{r}
 trials <- 4 * sapply(rep(6,100), g)
@@ -117,7 +118,7 @@ length(trials[abs(trials - pi)/pi <= e])
 
 hist(trials)
 ```
-We took 100 samples of size 6 and then estimated the mean of those. What is `e` doing here?
+We took 100 samples of size 6 (each of these being samples of $10^6$) and then estimated the mean of each of our 100 samples. (What is `e` doing here?)
 
 
 
