@@ -19,6 +19,7 @@ if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
 
 ## To-Do
 
+* Go over homework
 * Read .dta files in R
 * What is expected value and why do I care?
 * Estimate linear model via MLE by hand
@@ -187,7 +188,7 @@ summary(fish.m1)$coefficients[,2]
  
 b <- model$par
 b
-zstat <-b/se
+zstat <- b/se
 zstat
  
 # Calculate p-values for the z statistics
