@@ -66,7 +66,7 @@ We can use simulations to do all sorts of things. We've already gone through a f
 
 ```{r}
 n <- 20000
-f <- function(x) x^2
+f <- function(x) {x^2}
 plot(runif(n), runif(n), col='blue', pch=20)
 curve(f, 0, 1, n=100, col='red', add=TRUE, lwd=3)
 ```
@@ -147,6 +147,8 @@ olsForm <- formula(
          paste(ivs, collapse=' + ') ) 
   )
 mod1 <- lm(olsForm, data=msrep)
+
+mod1 <- lm(deaths75ln ~ upper20 + energypcln + intensep + sanctions70ln + sanctions75ln + deaths70ln, data=msrep)
 ```
 
 ```{r}
@@ -208,7 +210,7 @@ legend(x=3.7,y=0.95,legend=c("High upper20"),
 
 We have taken into account the systematic component of the uncertainty in our regression model but we should also take into account stochastic (sometimes called "fundamental") uncertainty.
 
-Basically, we're also taking into accoutn how well our model fits the data. First, we'll calculate another variance parameter based on the square root of the SSR divided by the degrees of freedom.
+Basically, we're also taking into account how well our model fits the data. First, we'll calculate another variance parameter based on the square root of the SSR divided by the degrees of freedom.
 
 ```{r}
 # Model uncertainty
@@ -269,7 +271,7 @@ Remember, this means that we will estimate our betas via maximizing a likelihood
 
 ```{r}
 ### GLM function
-m2 = glm(lfp ~ age + lwg + inc, data=data, family=binomial(link="logit"))
+m2 <- glm(lfp ~ age + lwg + inc, data=data, family=binomial(link="logit"))
 summary(m2)
 ```
 
@@ -311,7 +313,7 @@ Next, we take the scenario we've created and multiply it by the coefficients in 
 ```{r}
 # Calculate predicted log odd values
 predVals <- scen %*% coef(m2)
-head(predVals) #is something horrible wrong? These aren't between 0 and 1
+head(predVals) #is something horribly wrong? These aren't between 0 and 1
 ```
 
 Unlike OLS, we need to pass these predicted values through the link function in order to map the predicted values onto the possible range of values in the logistic CDF, which we are using to estimate the binary data generating process (one either participates in the labor force, or they don't).
@@ -337,7 +339,7 @@ Nice! But where the the uncertainty? Let's add some confidence intervals with th
 # Add confidence intervals
 predScen <- data.frame(scen)
 names(predScen) <- names(coef(m2))
-preds = predict(m2, 
+preds <- predict(m2, 
 	type='link', se.fit=TRUE, 
 	newdata=predScen )
 critVal <- qnorm(0.975) #for 95% CIs
@@ -415,4 +417,4 @@ summary(data$lwg)
 hist(data$lwg)
 ```
 
-While a one unit change (the required amoutn for a 2.12 times increase in the odds of labor force participation) would be rare, movement from the first to third quartile would increase the odds of labor force participation more than 50 percent. (How would you figure that out?)
+While a one unit change (the required amount for a 2.12 times increase in the odds of labor force participation) would be rare, movement from the first to third quartile would increase the odds of labor force participation more than 50 percent. (How would you figure that out?)
