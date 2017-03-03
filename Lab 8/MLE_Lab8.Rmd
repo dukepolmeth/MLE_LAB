@@ -5,12 +5,6 @@ date: "March 3, 2017"
 output: pdf_document
 ---
 
-## Today
-
-* Ordered outcomes
-* Robust SEs (a small amount)
-
-
 First, let's set up our workspace
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
 if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
