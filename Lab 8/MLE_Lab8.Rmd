@@ -1,0 +1,196 @@
+---
+title: "MLE - Lab 8"
+author: "Andy Ballard"
+date: "March 3, 2017"
+output: pdf_document
+---
+
+## Today
+
+* Ordered outcomes
+* Robust SEs (a small amount)
+
+
+First, let's set up our workspace
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
+  source(paste0(path.expand("~"), "/MLE_LAB/Lab 8/setup.R"))
+}
+```
+
+## Today
+
+* Notes on cross-grading
+* Homework 3
+* Multinomial logit
+* Conditional logit
+
+
+## Multinomial Logit
+
+When do we use multinomial logit instead of ordered logit or simple logit?
+
+Multinomial logistic regression is used to model nominal outcome variables, in which the log odds of the outcomes are modeled as a linear combination of the predictor variables.
+
+```{r}
+#Load up some data
+data(Heating); heat <- Heating; rm(Heating) #This dataset is native to the 'mlogit' package
+#Yes, packages can have data already associated with them, you load these with the data() command
+#Yes, you can use semicolons to run more than one command on one line
+#Why might we want the data object to be 'heat' instead of 'Heating'? Shorter, no caps
+
+```
+
+
+What kind of data do we have here?
+
+
+The observations consist of single-family houses in California that were newly built and had central airconditioning. The choice is among heating systems. There are five types of systems in the data:
+
+1. gas central (gc)
+2. gas room (gr)
+3. electric central (ec)
+4. electric room (er)
+5. heat pump (hp)
+
+The 900 observations in the dataset are characterized by the following variables:
+
+* `idcase` gives the observation number (1-900),
+* `depvar` identifies the chosen alternative (gc, gr, ec, er, hp),
+* `ic.alt` is the installation cost for the 5 alternatives,
+* `oc.alt` is the annual operating cost for the 5 alternatives,
+* `income` is the annual income of the household,
+* `agehed` is the age of the household head,
+* `rooms` is the number of rooms in the house,
+* `region` a factor with levels ncostl (northern coastal region), scostl (southern coastal
+region), mountn (mountain region), valley (central valley region).
+
+What we'll model is the choice of heating system, given cleverly by `depvar`. 
+
+Note that there is a separate installation cost and operating cost for each of the 5 alternatives for each single-family home, so there are 5 `oc` variables and 5 `ic` variables for each row. We need more information than just the costs associated with the chosen system in order to properly model this relationship. Also because of this, we will need to reshape our data so that the cost variables are in a form that the `mlogit()` function can read. There is a built in function in the `mlogit` package that can help us with this, called `mlogit.data()`. 
+
+`mlogit.data()` takes argumkents for:
+
+* `data`, a data frame (`heat` in this case)
+* `choice`, a string specifying which variable in the data frame indicates the outcome choice (`depvar`)
+* `shape`, a specification where rows are either alternatives (`long`) or observations (`wide`, as in our data)
+* `varying`, an index of the variables that depend on the specific alternatives (columns [3:12])
+* Other stuff we don't need to worry about right now
+
+```{r}
+h <- mlogit.data(heat, shape="wide", choice="depvar", varying=c(3:12))
+head(h)
+```
+As we can see, now our data is in a form such that each observation has 5 rows, one for each of the possible heating systems. Note: you could also accomplish this with the `melt()` command from the `reshape2` package.
+
+Now let's run a model and see what's up
+
+```{r}
+m1 <- mlogit(depvar~ic+oc|0, data=h)
+summary(m1)
+
+```
+What does this model tell us? It says that as the costs (both installation and operating, because both coefficients are negative) of any particular system increase (relative to other systems), that system is less likely to be chosen. Good, this confirms either that the data are good or that people aren't too crazy, or both.
+
+We can look at how well the predicted probabilities match up with the observed probabilities:
+
+```{r}
+m1 %>% fitted(., outcome=F) %>% apply(., 2, mean) %>% sort()
+sort(table(heat$depvar)/nrow(heat))
+```
+Yikes, not great Bob. At least the model correctly orders the top two most commonly chosen systems, `gc` and `gr`, but it misses the other 3. Also, the values are off by about 10% or greater for `gc` and `gr`. 
+
+Okay, so how could we make our model better?
+
+One thing we can do is to include alternative-specific constraints (separate constants for each alternative, with a reference category). This will actually mathematically guarantee that the predicted probabilities equal the observed probabilites.
+
+```{r}
+m2 <- mlogit(depvar~ic+oc, h, reflevel = 'hp')
+summary(m2)
+
+m2 %>% fitted(., outcome=F) %>% apply(., 2, mean) %>% sort()
+sort(table(heat$depvar)/nrow(heat))
+```
+
+Hot dang! But there are other ways we can evaluate such a model. Let's try a substantive interpretation. What we have done is estimate the type of system chosen based on the cost of the system to install and the cost to run the system. The ratio between these coefficients can give us sort of a discount rate, or how much more people are willing to pay up front to have a system that runs more efficiently. We can call this the willingness to pay (wtp).
+
+```{r}
+wtp2 <- coef(m2)["oc"]/coef(m2)["ic"]
+wtp2
+
+exp(coef(m2))
+```
+
+According to our model, households are willing to pay \$4.56 up front to save \$1 each year, for a discount rate of $1/4.56=.219$ Does that seem reasonable? What more information might you need to make an informed decision about this?
+
+
+Now we can do some prediction, our favorite. We've actually done this above (with the `fitted()` function) to calculate the discount factors. Now we'll just show that it's doing much the same thing we have done in the past.
+
+```{r}
+X <- model.matrix(m2) #Why don't we need to specify a scenario here?
+alt <- factor(h$alt)
+chid <- factor(h$chid)
+Xbeta <- X %*% coef(m2)
+e.Xbeta <- Xbeta %>% exp() %>% as.numeric()
+se.Xbeta <- tapply(e.Xbeta, chid, sum)
+preds <- e.Xbeta / se.Xbeta[chid]
+preds <- matrix(preds, ncol = 5, byrow = TRUE) #Why would it be messy to use piping for this whole expression?
+
+preds %>% apply(., 2, mean) %>% sort()
+
+#Is it the same as before?
+sort(table(heat$depvar)/nrow(heat))
+m2 %>% fitted(., outcome=F) %>% apply(., 2, mean) %>% sort()
+```
+
+By George, it's the same! So what does that mean that the `fitted()` function is doing?
+
+Let's look at some predictions how we're used to seeing them: plots.
+
+```{r}
+# For this we'll have to divise a scenario, because of the way we generally plot these things
+# Let's look at the effect of installation costs on the probability of choosing each system
+hpred.df <- heat[,1:12]
+pred.scen <- with(hpred.df, data.frame(depvar=depvar, ic.gc=sort(ic.gc), ic.gr=sort(ic.gr), 
+                                       ic.ec=sort(ic.ec), ic.er=sort(ic.er), ic.hp=sort(ic.hp),
+                                       oc.gc=median(oc.gc), oc.gr=median(oc.gr), oc.ec=median(oc.ec), 
+                                       oc.er=median(oc.er), oc.hp=median(oc.hp)))
+h.pred <- mlogit.data(pred.scen, shape="wide", choice="depvar", varying=c(2:11))
+preds <- predict(m2,newdata=h.pred)
+preds <- data.frame(cbind(preds, IC=seq(min(h$ic), max(h$ic), length.out=900)))
+
+
+#Let's try using base plot for once
+plot(preds$IC, preds$gc, type="l", ylim=c(0,1), xlab="Installation Cost", ylab="Predicted Probability")
+lines(preds$IC, preds$hp, col="red")
+lines(preds$IC, preds$ec, col="blue")
+lines(preds$IC, preds$er, col="green")
+lines(preds$IC, preds$gr, col="darkorchid")
+
+#Is ggplot faster?
+preds.long <- melt(preds, id="IC")
+ggplot(preds.long, aes(x=IC, y=value, colour=variable)) + geom_line()
+
+#Sure is (although you could also build the plot manually)
+
+```
+
+
+## Conditional vs. Multinomial Logit
+
+Newsflash, we've been doing both "conditional" and "multinomial" logits this whole time. Here's the difference as described by the author of the `mlogit` package:
+
+> "A model with only individual specific variables is sometimes called a multinomial logit
+model, one with only alternative specific variables a conditional logit model and one with
+both kind of variables a mixed logit model. This is seriously misleading : conditional logit
+model is also a logit model for longitudinal data in the statistical literature and mixed
+logit is one of the names of a logit model with random parameters. Therefore, in what
+follow, we'll use the name multinomial logit model for the model we've just described
+whatever the nature of the explanatory variables included in the model."
+
+So which type of model is m1, and which is m2?
+
+```{r}
+m1$call
+m2$call
+```

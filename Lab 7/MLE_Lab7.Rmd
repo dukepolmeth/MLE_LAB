@@ -8,7 +8,7 @@ output: pdf_document
 ## Today
 
 * Ordered outcomes
-* Robust SEs
+* Robust SEs (a small amount)
 
 
 First, let's set up our workspace
@@ -110,7 +110,7 @@ coeftable <- cbind(coef(summary(m1)),"p value" = round(m1.pvals, 4))
 coeftable
 ```
 
-Hokay. Interpretation. We now have our p-values, which tell us that everything is significant (except public). Hooray! We're done, or far from it.
+Hokay. Interpretation. We now have our p-values, which tell us that everything is significant. Hooray! We're done, or far from it.
 
 We can also calculate confidence intervals pretty easily:
 
@@ -134,7 +134,7 @@ m1.cis <- cbind(m1.cis, "Odds Ratio" = m1.OR)
 m1.cis
 ```
 
-These are proportional odds ratios. So we say that for `black` black respondents are 0.399 times as likely as non-black respondents to provide the highest level of support for HW Bush (5) than all other values combined. Let that sink in for a second.
+These are proportional odds ratios. So we say that for `black` black respondents are 0.399 times as likely as non-black respondents to provide the highest level of support for HW Bush (3) than all other values combined. Let that sink in for a second.
 
 For more continuous variables like income, a one unit change in income means that a respondent is 1.005 times as likely to move from one of the lower categories of `bushapproval` to the highest category of approval. This per unit change is smaller, but there are more values and more variance, so it doesn't mean that the substantive effect is smaller. 
 
