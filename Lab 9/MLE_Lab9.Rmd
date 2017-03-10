@@ -14,6 +14,7 @@ if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
 
 ## Today
 
+* Turn in your homeworks as PDFs please
 * Homework 4 (NOT due during break. Breaks are breaks.)
 * Count models
 
