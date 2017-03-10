@@ -112,6 +112,9 @@ Hot dang! But there are other ways we can evaluate such a model. Let's try a sub
 wtp2 <- coef(m2)["oc"]/coef(m2)["ic"]
 wtp2
 
+wtp <- coef(m1)["oc"]/coef(m1)["ic"]
+wtp
+
 exp(coef(m2))
 ```
 
@@ -122,7 +125,7 @@ Now we can do some prediction, our favorite. We've actually done this above (wit
 
 ```{r}
 X <- model.matrix(m2) #Why don't we need to specify a scenario here?
-alt <- factor(h$alt)
+#alt <- factor(h$alt)
 chid <- factor(h$chid)
 Xbeta <- X %*% coef(m2)
 e.Xbeta <- Xbeta %>% exp() %>% as.numeric()
@@ -145,13 +148,16 @@ Let's look at some predictions how we're used to seeing them: plots.
 # For this we'll have to divise a scenario, because of the way we generally plot these things
 # Let's look at the effect of installation costs on the probability of choosing each system
 hpred.df <- heat[,1:12]
-pred.scen <- with(hpred.df, data.frame(depvar=depvar, ic.gc=sort(ic.gc), ic.gr=sort(ic.gr), 
-                                       ic.ec=sort(ic.ec), ic.er=sort(ic.er), ic.hp=sort(ic.hp),
-                                       oc.gc=median(oc.gc), oc.gr=median(oc.gr), oc.ec=median(oc.ec), 
-                                       oc.er=median(oc.er), oc.hp=median(oc.hp)))
+
+pred.scen <- with(hpred.df, data.frame(depvar=depvar, ic.gc=sort(ic.gc), ic.gr=sort(ic.gr), ic.ec=sort(ic.ec), ic.er=sort(ic.er), ic.hp=sort(ic.hp),
+oc.gc=median(oc.gc), oc.gr=median(oc.gr), oc.ec=median(oc.ec), 
+oc.er=median(oc.er), oc.hp=median(oc.hp)))
+
 h.pred <- mlogit.data(pred.scen, shape="wide", choice="depvar", varying=c(2:11))
+
 preds <- predict(m2,newdata=h.pred)
 preds <- data.frame(cbind(preds, IC=seq(min(h$ic), max(h$ic), length.out=900)))
+
 
 
 #Let's try using base plot for once

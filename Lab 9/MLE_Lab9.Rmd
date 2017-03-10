@@ -1,0 +1,188 @@
+---
+title: "MLE - Lab 9"
+author: "Andy Ballard"
+date: "March 10, 2017"
+output: pdf_document
+---
+
+First, let's set up our workspace
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
+  source(paste0(path.expand("~"), "/MLE_LAB/Lab 9/setup.R"))
+}
+```
+
+## Today
+
+* Homework 4 (NOT due during break. Breaks are breaks.)
+* Count models
+
+
+## Count models
+
+When do we use count models? 
+
+When we want to model some sort of count variable, where the dependent variable has bounds $\left[0,\infty\right]$. Because we assume there is no upper limit, the support of the function goes from 0 to infinity. The Poisson distribution is a common underlying distribution for count models, and we'll use a Poisson model first. The Poisson distribution is related to a number of other distributions:
+
+* As the number of observations trends toward infinity (or in practice, gets really big) then the Poisson is a good approximation of the Binomial.
+* Similarly, if there is a fixed upper limit for your DV, use a Binomial instead.
+* For particularly small $n$, the logistic regression model and the Poisson model will give similar results
+* If counts span a range of values (e.g. they're in 'bins'), multinomial logistic regression should be used instead.
+
+Let's work with some count data and run a model.
+
+
+```{r}
+
+###################################################
+# Load Pakistan Protest Data
+load(paste0(labPath, 'pakProtestData.rda')) # Loads object called pakData
+###################################################
+```
+
+Our data are about protests in Pakistan. We'll be modeling the number of protests based on some political and economic factors.
+
+```{r}
+###################################################
+# Examine DV
+dv <- 'protest.tALL'
+plot( density( pakData[,dv] ) )
+
+# Examine protests over time
+plot(pakData$date, pakData$protest.tALL, type='l')
+###################################################
+
+###################################################
+# Model count variables using a poisson process
+ivs <- c(
+	'ProxElection', # Proximity to election
+	'NY.GDP.PCAP.KD.l1', # GDP per capita in constant 2000 dollars, lagged by 1 month
+	'FP.CPI.TOTL.ZG.l1', # Inflation lagged by one month
+	'intratension.l1', # Number of conflictual actions and events internal to the government, lagged by 1 month
+	'W.centdist.std.protest.tALL.l1' # Spatial temporal lag of dv
+	)
+form <- as.formula( paste0(
+	dv, ' ~ ',
+	paste(ivs, collapse=' + ') 
+	) )
+
+summary(poisMod <- glm(form, data=pakData, family=poisson))
+```
+
+Woo, stars everywhere! Interesting that proximity to an election doesn't matter, but all the other variables are significant and we'll look at some of these relationships in more detail. But first, is this even the right type of model to be running? Sure, we've got count data, but what about dispersion?
+
+As we know, the Poisson distribution is interesting, in that its mean and variance are equal. In practice, this is rare. Particularly if there are large positive outliers in the DV, the variance will be greater than the mean. For such cases, we can use a Negative Binomial model instead.
+
+Let's check the dispersion parameter, using the `dispersiontest()` function from the `AER` package. This is a hypothesis test for whether the mean and variance of the DV (found via a model object) are equal.
+
+Overdispersion is a symptom of a variety of modeling challenges, but the most substantively important is that events that are positively correlated (previous events increase the rate of subsequent events) will manifest overdispersion in Poisson models. You'll also get incorrect standard error estimates.
+
+```{r}
+# Check for overdispersion via Cameron and Trivedi
+dispersiontest(poisMod)
+```
+
+We can also test for overdispersion by looking at the relationship of the standard deviation and the square root of the mean, which should also be equal (since their squares are equal)
+
+```{r}
+# Gelman & Hill test for overdispersion
+# standard deviation of the Poisson predictions is equal to the square root of the mean
+predVals = data.matrix(cbind(1, pakData[,ivs])) %*% coef(poisMod)
+predCnts = exp(predVals)
+z=(pakData[,dv] - predCnts)/sqrt(predCnts)
+df=nrow(pakData) - (length(ivs) + 1)
+dispRat = sum(z^2)/df
+print(paste0('Overdispersion ratio is ', round(dispRat,2) ) )
+pval = pchisq(sum(z^2), df, lower.tail = F)
+print(paste0('p-value ', round(pval, 4)) )
+# p-value is 0, indicating that the probability is essentially zero 
+# that a random variable from this chi sq distribution would be as large
+# as what we found
+###################################################
+```
+
+There are a number of ways to deal with overdispersion. The first, which I mentioned above, is just to use a Negative Binomial model. You can also transform the standard errors of a Poisson model by multiplying them by the square root of the dispersion parameter (via the Gelman and Hill calculation above)
+
+```{r}
+dispAdj <- sqrt(dispRat)
+
+# Rebuild coefficient table
+coefTable <- summary( poisMod )$'coefficient'
+coefTable[,2] <- coefTable[,2] * dispAdj # Adjust standard errors
+coefTable[,3] <- coefTable[,1]/coefTable[,2] # Recalculate z-statistic
+coefTable[,4] <- 2*pnorm( -abs(coefTable[,3]) ) # Recalculate p values
+```
+
+Now we can compare the original model results with those using the dispersion parameter adjustment, and those from both a Negative Binomial and quasipoisson models (which are both used in cases of overdispersion).
+
+```{r}
+# Original Model
+print( round(summary( poisMod )$'coefficient', 3) )
+
+# Original Model with dispersion parameter adjustment
+print(round(coefTable, 3))
+
+# Negative binomial model
+negbinMod <- glm.nb(form, data=pakData)
+round( summary(negbinMod)$'coefficient', 3 )
+
+# Quasilikelihood
+qpoisMod <- glm(form, data=pakData, family=quasipoisson)
+round( summary(qpoisMod)$'coefficient', 3 )
+
+
+###################################################
+```
+
+NOTE: The Quasi-Poisson uses a Poisson distribution, but also estimates a separate scale parameter (e.g. variance), even though in the regular Poisson this is fixed. I'm not sure whether Daniel will talk about these in depth, but I've just included this as another thing to compare against.
+
+Substantively, it seems like conflictual government events and actions are not something we should look at for further analysis, even though the original model suggested we should. We may also want to be skeptical of whether the spatial-temporal lag of protests has a meaningful impact on protests, since this had a smaller effect in the NB model than others.
+
+Another limitation of the standard coutn model is that the zeros and the nonzeros are assumed to come from the same data-generating process. Instead, it might be true that there are two separate processes here:
+
+1. The decision to protest
+2. How much to protest
+
+We can remove this assumption (and hence potentially get a better picture of things) by using hurdle and zero-inflated models. These models are particularly useful with data where there are a LOT of zeros. Our data only have 4 zeros, so we're going to cheat a little bit and add some zeros.
+
+```{r}
+# Introducing some more zeros
+sum(pakData[,dv]==0)
+pakData2 = pakData
+pakData2[ which(pakData2[,dv] < 4), dv] = 0
+sum(pakData2[,dv]==0) #Meh, more-ish. More than 10% now
+
+
+# Hurdle & Zero-inflated models
+Form2 = as.formula( paste0(
+	dv, ' ~ ',
+	paste(ivs[1:3], collapse=' + '), ' | ', 
+	paste(ivs[4:5], collapse=' + ')	
+	) )
+```
+
+The distinction between hurdle and zero-inflated models. 
+### Hurdle models are for modeling 2 types of units: 
+	(1) units that never experience outcome and
+	(2) units that always experience the outcome at least once
+### Zero-inflated models are used for 2 types of units:
+	(1) units that never experience outcome and
+	(2) units that experience outcome but not always
+
+They are similar in how they model the first stage: Both are modeling the probability of no event and some event. But they differ in the second stage:
+	* Hurdle models use a zero-truncated probability distribution function (e.g., zero truncated poisson, thus counts must be non-zero)
+	* Zero inflated models use a typical discrete probability distribution (e.g., poisson, thus counts can still be zero)
+```{r}
+hpoisMod <- hurdle(Form2, data=pakData, dist='poisson')
+summary(hpoisMod)$'coefficient'
+
+zpoisMod <- zeroinfl(Form2, data=pakData, dist='poisson')
+summary(zpoisMod)$'coefficient'
+###################################################
+
+```
+
+Split into groups of 2. Take a few minutes and:
+
+1. Substantively interpret the results of one of the two-stage models. 
+2. Think about prediction with one-stage count models. Does it differ from what we've been doing in the past?
