@@ -1,0 +1,389 @@
+---
+title: "MLE - Lab 10"
+author: "Andy Ballard"
+date: "March 22, 2017"
+output: pdf_document
+---
+
+First, let's set up our workspace
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
+  source(paste0(path.expand("~"), "/MLE_LAB/Lab 10/setup.R"))
+}
+
+set.seed(6886)
+```
+
+
+## Today
+
+* Summary tables in LaTeX
+* Missing data and imputation (Amelia and MICE)
+
+
+## Descriptive Summary Statistics
+
+Let's learn how to show some descriptive summary statistics in a table in LaTeX. Fortunately, there is a package our there that allows one to easily display descriptive summary statistics for variables in LaTeX.
+
+Let us use some data to illustrate.
+
+```{r,tidy=TRUE}
+LDC <- read.dta(paste0(labPath, "LDC_IO_replication.dta"))
+```
+
+We'll use the package `reporttools` for this.
+
+```{r,tidy=TRUE,results="hide"}
+#Pick out variables we want
+varsLDC <- LDC[, c("newtar", "fdignp", "polityiv_update2", "gdp_pc_95d")]
+#Make a caption
+capLDC <- "Descriptive Statistics: LDC dataset"
+#Make the table
+tableContinuous(vars = varsLDC, cap = capLDC, lab = "tab: cont1", longtable = F, prec=2)
+```
+
+The output code (which is hidden here to save space) can easily be used in LaTeX.
+
+
+# Imputation of Missing Data
+
+Let's look at some data and run a model.
+
+```{r}
+
+###################################################
+# Example model
+apsr <- read.dta(paste0(labPath,"apsrfinaldata.dta"))
+
+data <- apsr[,c('gini_net_std', 'polity2', 'ELF_ethnic')]
+n <- nrow(data)
+set.seed(6886)
+
+dv <- "pg"
+ivs <- c("betweenstd", "lngdpstd")
+
+# Run regression with LM
+form <- formula(pg ~ betweenstd + lngdpstd)
+summary(lm1 <- lm(form, data=apsr))
+
+###################################################
+```
+
+Cool, we have a model, but as you can see we didn't have any missing data. I guess we're done, y'all can go home.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Gotcha.
+
+Let's introduce some random missingness to our dataset
+
+```{r}
+set.seed(6886)
+missMatrix <- cbind(rbinom(n, 1, .9),rbinom(n, 1, .85),rbinom(n, 1, .83)) #3 new variables with different proportions of 0s
+missMatrix[missMatrix==0] <- NA #make 0s NAs
+apsrMiss <- apsr[,c(dv, ivs)] * missMatrix #convert those proportions of missingness to the IVs and DV
+
+# Check out new dimensions
+dim(na.omit(apsrMiss)) 
+
+```
+
+
+Simply throwing away missing data is increasingly being recognized in our field as bad practice, which is why we've been learning about what to do with missing data this week. Data that is missing systematically and not arbitrarily can challenge the validity of our regression results. The accuracy of our model profits from the completeness of data.
+
+Imputation allows us to make statistical inferences about missing data values. Our imputed values are based on the data that we have for other observations and for other variables of the unit that has missing values. The most sophisticated imputation techniques compute multiple alternative datasets based on the existing dataset and then make an inference based on those datasets to estimate the final imputed value for the missing values of any given variable (therefore "multiple imputation").
+
+Lets first rerun our regression without the missing values, and compare it to the original model.
+
+```{r}
+lm1ListDel <- lm(form, data=apsrMiss) #This is one reason that creating model formula objects is useful
+round(summary(lm1ListDel)$'coefficients',3)
+
+# Full data results
+round(summary(lm1)$'coefficients',3)
+
+```
+
+Potentially substantively different! Now let's look at imputing the missing data, using Amelia, which is the most commonly used package for missing data in politcal science. Gary King and his minions put it together a while back.
+
+```{r}
+
+apsrAmelia = amelia(x=apsrMiss, m=1)
+
+# lets just use the second imputed dataset for now
+## and reestimate our model
+lm1Amelia <- lm(form, data=apsrAmelia$imp$imp1)
+round(summary(lm1Amelia)$'coefficients',3)
+```
+
+
+Another tool for imputing missing data is `sbgcop`, developed by Peter Hoff (of Duke stats!). `sbgcop` is a bayesian model and thus we sample our way to posterior values. the nsamp parameter controls how many samples we draw, here I just set it to 5000, but you might need to set it higher, so that you can be sure the results have converged. 
+
+```{r message=FALSE, tidy=TRUE}
+
+apsrSbgcop <- sbgcop.mcmc(Y=apsrMiss, nsamp=5000, seed=6886, verb=FALSE)
+
+```
+
+`apsrSbgcop` is a list comprised of a number of objects, the most relevant for us is Y.impute
+
+In this case it has dimensions: 46 x 3 x 1000 the first two dims correspond to the size of our original dataset and the last dimension, 1000, represents the iterations from our sampler.
+
+```{r}
+names(apsrSbgcop)
+dim(apsrSbgcop$Y.impute)
+```
+
+We need to account for the fact that it took some time for our sampler to converge, so we need to burn some of our initial draws. below I burn (throw out) the first 50% of the draws we pulled from our bayesian model.
+
+```{r}
+toKeep <- (dim(apsrSbgcop$Y.impute)[3]/2 + 1):dim(apsrSbgcop$Y.impute)[3]
+apsrSbgcopPost <- apsrSbgcop$Y.impute[,,toKeep] #why two commas?
+```
+
+Next we average across these results so that we can have just one consolidated imputed dataset for our analysis.
+
+```{r}
+apsrSbgcopPostAvg <- apply(apsrSbgcopPost, c(1,2), mean)
+
+# Now lets add colnames back in and turn this back into a dataframe
+colnames(apsrSbgcopPostAvg) <- names(apsrMiss)
+apsrSbgcopPostAvg <- data.frame(apsrSbgcopPostAvg)
+
+# Last lets rerun our model using the imputed data from sbgcop
+lm1Sbgcop <- lm(form, data=apsrSbgcopPostAvg)
+round(summary(lm1Sbgcop)$'coefficients',3)
+
+# Compare three sets of results: 
+
+# True model, i.e., no randomly excluded data
+round(summary(lm1)$'coefficients',3)
+
+# Listwise deletion
+round(summary(lm1ListDel)$'coefficients',3)
+
+# Amelia
+round(summary(lm1Amelia)$'coefficients',3)
+
+# Sbgcop
+round(summary(lm1Sbgcop)$'coefficients',3)
+###################################################
+```
+
+Were the imputed models closer to the real model? You bet!
+
+
+
+# Imputation of real world missing data with Amelia
+
+
+We'll look at the LDC data set, which is panel data for 138 countries, which has a ton of different variables in it.
+
+```{r,tidy=TRUE}
+LDC <- read.dta(paste0(labPath, "LDC_IO_replication.dta"))
+```
+
+
+```{r,tidy=TRUE}
+#summary(LDC)
+```
+
+As you can see, we have quite a few NAs in this dataset. Let's impute some of the missing values. With a large dataset, we could write an imputation command that would take a looooooong time. One time I had one running over the weeknd and it still didn't finish. That was when I was young and naive (first year) and didn't know a damn thing about computing power so I thought running it on a regular university computer was a good idea. Side note, I wouldn't use INEGI data to measure violent deaths in Mexico, the data are incredibly corrupt. More applicable side note: it doesn't make sense to impute your missing data unless you have values for the vast majority of your data. Let's say half your data contains missing values. You're actually just kind of stuck and shouldn't impute. You can run models and maybe find things, but it might be best to try and get better data. There really isn't a threshhold for this type of thing, so it's up to you to decide.
+
+Anyway, we will demonstrate the imputation of missing data with only a small subset of three countries with a small number of variables (due to time constraints).
+
+```{r,tidy=TRUE}
+LDCs <- subset(LDC, ctylabel=="SouthAfrica" | ctylabel=="Turkey" | ctylabel=="Indonesia")
+
+# Let's reduce our dataset to some variables that we might be most interested in
+
+keep <- c("ctylabel","date","newtar","fdignp","gdp_pc_95d","polityiv_update2","usheg","lnpop")
+LDCs <- LDCs[,keep]
+```
+
+What are these variables?
+
+* `ctylabel`: is an identifier for countries
+* `date`: year, 1970-2002
+* `newtar`: average tariff rates, 1980-1999
+* `fdignp`: Net change in foreign direct investment in the reporting country, expressed as % GNP
+* `gdp_pc_95d`: GDP per capita in 1995 dollars
+* `polityiv_update2`: Policy scores (higher=more democratic)
+* `usheg`: US exports and imports as a percentage of world exports and imports
+* `lnpop`: Log of the country's population
+
+
+Two things that you should be aware of when you use Amelia to impute data:
+
+1. The imputation of missing values in large datasets can take a lot of time.
+2. Amelia has problems with variables that are perfectly correlated to other variables.
+
+**The content below is based on the Amelia guide. A link is provided at the end.**
+
+Now let us do the imputation. We will create only 5 imputed datasets (m=5).
+
+
+```{r,tidy=TRUE}
+a.out <- amelia(LDCs, m = 5, ts = "date", cs = "ctylabel")
+# It is very important to include ts as the time variable and cs as the unit variable. Otherwise Amelia would treat all observations as independent
+```
+
+Let us have a look at the imputed values of the first three datasets that were generated.
+
+```{r,tidy=TRUE}
+hist(a.out$imputations[[1]]$fdignp, col="grey", border="white")
+hist(a.out$imputations[[2]]$fdignp, col="grey", border="white")
+hist(a.out$imputations[[3]]$fdignp, col="grey", border="white")
+```
+
+
+We can now run an analysis with our imputed dataset. The Amelia package is integrated with the `Zelig` package (both are by Gary King), so we will use this package to estimate a new regression with the imputed data.
+
+
+```{r,tidy=TRUE,results="hide",include=FALSE}
+library(Zelig)
+```
+
+```{r,tidy=TRUE}
+z.out.imp <- zelig(polityiv_update2 ~ gdp_pc_95d + fdignp, data = a.out$imputations, model = "ls") 
+# Kind of annoying that it asks you to cite itself when you use the function, if you ask me.
+summary(z.out.imp)
+```
+
+One of the cool things about `Zelig` is that we didn't have to specify which of the imputed datasets we're using. The last time I checked, the default was to average over them. If we were to do this with `lm` it yells at us
+
+```{r eval=FALSE}
+m.out.imp <- lm(polityiv_update2 ~ gdp_pc_95d + fdignp, data = a.out$imputations) 
+```
+Instead we have to specify which dataset we want to use, or average over it ourselves like the first example.
+
+```{r}
+summary(m.out.imp <- lm(polityiv_update2 ~ gdp_pc_95d + fdignp, data = a.out$imputations$imp1)) 
+```
+
+`Amelia` has a graphical interface that *might* make it easier for you to use it. When I tried to use the graphical interface, however, my R session crashed multiple times and I had to restart it completely. So be cautious and save your work before you use the following command. `Zelig` has had some issues with its dependencies recently. It's nice when it works, but it's pretty finicky. I get the feeling that the authors don't update it much anymore.
+
+```{r,tidy=TRUE}
+# AmeliaView()
+```
+
+For more information on how to use the package (for your own research) see the very helpful introduction:
+
+https://cran.r-project.org/web/packages/Amelia/vignettes/amelia.pdf
+
+
+# Imputation with MICE
+
+MICE (Multivariate Imputation via Chained Equations) is one of the commonly used package by R users. Creating multiple imputations as compared to a single imputation (such as mean) takes care of uncertainty in missing values.
+
+MICE assumes that the missing data are Missing at Random (MAR), which means that the probability that a value is missing depends only on observed value and can be predicted using them. It imputes data on a variable by variable basis by specifying an imputation model per variable.
+
+For example: Suppose we have $X_1, X_2,...,X_k$ variables. If $X_1$ has missing values, then it will be regressed on other variables $X_2$ to $X_k$. The missing values in $X_1$ will be then replaced by predictive values obtained. Similarly, if $X_2$ has missing values, then $X_1$, $X_3$ to $X_k$ variables will be used in prediction model as independent variables. Then, missing values will be replaced with predicted values.
+
+We'll use a native `R` dataset, `iris` (yes, the flowers) to impute data using MICE.
+
+```{r}
+data <- iris
+head(data)
+
+identical(dim(iris), dim(na.omit(iris)))
+```
+
+Since there are no missing values, we'll have to create some. This time we'll use the `prodNA` function from the `missForest` package, and create 10% missingness at random.
+
+```{r}
+iris.mis <- prodNA(iris, noNA = 0.1)
+
+summary(iris.mis) #NAs!
+```
+
+I'm going to remove the categorical variable so we don't have to do multiple methods of imputation. We could encode the factor levels as numbers and follow the same procedure, if we wanted, and put the labels back in later. That would be fine, but we aren't going to right now.
+
+We'll also save a dataframe with the values missing to compare models later.
+
+```{r}
+iris.del <- iris.mis
+
+iris.mis <- subset(iris.mis, select = -c(Species))
+summary(iris.mis)
+```
+
+We can look at a table of the missing data with the `md.pattern` function in the `mice` package. What is this table telling us?
+
+```{r}
+md.pattern(iris.mis)
+```
+
+Let's create a visual representation of the missing data, since the table is sort of tough to read.
+
+```{r}
+mice_plot <- aggr(iris.mis, col=c('navyblue','yellow'),
+                    numbers=TRUE, sortVars=TRUE,
+                    labels=names(iris.mis), cex.axis=.7,
+                    gap=3, ylab=c("Missing data","Pattern"))
+```
+
+Now we can impute the missing values. There are four methods in `MICE` for use with different types of data:
+
+1. PMM (Predictive Mean Matching)  - For numeric variables
+2. logreg (Logistic Regression) - For Binary Variables( with 2 levels)
+3. polyreg (Bayesian polytomous regression) - For Factor Variables (>= 2 levels)
+4. Proportional odds model (ordered, >= 2 levels)
+
+Since we have numeric variables, we'll use PMM.
+
+```{r, message=FALSE, tidy=TRUE}
+imputed_Data <- mice(iris.mis, m=5, maxit = 50, method = 'pmm', seed = 500, print=FALSE)
+```
+```{r}
+summary(imputed_Data)
+```
+
+Here, `m` refers to the number of imputed datasets (5), `maxit` refers to the number of iterations (this took us a while with just 50, often you'll want to use thousands, or tens of thousands). Now let's look at the imputed values.
+
+```{r}
+imputed_Data$imp$Sepal.Width
+```
+Now we can run some models.
+
+```{r}
+#Imputation with MICE
+fit.imp <- with(data = imputed_Data, exp = lm(Sepal.Width ~ Sepal.Length + Petal.Width))
+
+#True model
+fit <- lm(Sepal.Width ~ Sepal.Length + Petal.Width, data=iris)
+
+#Model with listwise deletion
+fit.del <- lm(Sepal.Width ~ Sepal.Length + Petal.Width, data=iris.del)
+```
+And we can compare the results.
+
+```{r}
+# True model, i.e., no randomly excluded data
+round(summary(fit)$'coefficients',3)
+
+# Listwise deletion
+round(summary(fit.del)$'coefficients',3)
+
+# MICE
+summary(fit.imp)
+
+```
