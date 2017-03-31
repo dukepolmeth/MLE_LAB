@@ -1,0 +1,268 @@
+---
+title: "MLE - Lab 11"
+author: "Andy Ballard"
+date: "March 30, 2017"
+output: pdf_document
+---
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#First, let's set up our workspace
+if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
+  source(paste0(path.expand("~"), "/MLE_LAB/Lab 11/setup.R"))
+}
+
+set.seed(6886)
+```
+
+## Today
+
+* Regression tables in LaTeX
+* Selected Problems from Homework 4
+* Hierarchical Models
+
+## Regression tables in LaTeX
+
+```{r}
+d_2010 <- WDI(indicator = c("NY.GDP.PCAP.CD", "SP.DYN.IMRT.IN",
+                            "SH.MED.PHYS.ZS"), start = 2010, end = 2010,
+              extra = TRUE)
+```
+
+There are a lot of unwanted columns. We'll just keep `country`, `year`, and three variables of interest:`NY.GDP.PCAP.CD`, `SP.DYN.IMRT.IN`, `SH.MED.PHYS.ZS`.
+
+```{r}
+d_2010 <- d_2010[d_2010$region != "Aggregates", 
+       c("country", "year", "NY.GDP.PCAP.CD", "SP.DYN.IMRT.IN",
+         "SH.MED.PHYS.ZS")]
+
+#Rename columns
+colnames(d_2010)
+colnames(d_2010)[3:5] <- c('gdppc', 'infant_mortality', 'number_of_physician')
+colnames(d_2010)
+
+#Log GDP/capita
+d_2010$log_gdppc <- log(d_2010$gdppc)
+
+#Remove missing data
+d_2010 <- na.omit(d_2010) #This would be a good candidate for imputation, FYI
+
+#Build some linear models
+m1 <- lm(infant_mortality ~ log_gdppc, data = d_2010)
+summary(m1)
+
+m2 <- lm(infant_mortality ~ log_gdppc + number_of_physician, data = d_2010)
+summary(m2)
+```
+
+We can report the model in a nice, journal-ready format. The `stargazer` library takes your model objects and generates tables in LaTeX.
+
+```{r results='asis'}
+# If using knir, use the option results='asis'
+stargazer(m1, m2)
+```
+
+
+
+## Homework 4
+
+
+### Plot frequency of DV, examine mean and variance
+```{r}
+#Load data
+load(paste0(labPath, "capitalcontrols.RData")); cap <- capitalcontrols; rm(capitalcontrols)
+
+#Look at DV frequency
+plot(table(cap$totalcha), ylab="Frequency", xlab="Capital Control Policies")
+
+#Descriptives for DV
+summary(cap$totalcha)
+sum(cap$totalcha==0)/nrow(cap) #37% 0s
+
+#Ratio of variance to mean of DV (Poisson assumes is 1)
+var(cap$totalcha)/mean(cap$totalcha) #What does this suggest?
+```
+
+### Modeling the number of policy changes per government as a count model
+
+Let's look at the log-likelihood for a Poisson model.
+
+The likelihood contribution of one observation for the Poisson distribution is:
+$$p(Y=y_{i} | \mu)=\frac{e^{-\mu} \mu^{y_{i}}}{y_{i}!}$$
+
+For $n$ observations, we have the product of these likelihood contributions:
+$$L(\mu | y)=\prod_{i=1}^n \frac{e^{-\mu} \mu^{y_{i}}}{y_{i}!}$$
+
+We get the log-likelihood by taking the natural log of the above:
+$$\ell (\mu | y)=-n\mu+ln(\mu)\sum_{i}^n y_{i}-\sum_{i}^n ln(y_{i}!)$$
+
+Since we model the mean as $E(Y_{i})=\mu=e^{X_{i}\beta}$, you can substitute this for $\mu$. You could also specify that $X_{i}$ is a vector of values for `veto players`, `international constraints`, and their interaction, and that $y_i$ is the number of capital control policies per government. 
+
+Now let's run a model.
+
+```{r}
+modForm <- formula("totalcha ~ envp + loconst + envp:loconst")
+
+mp.full <- glm(modForm, data=cap, family=poisson)
+```
+
+To run a likeliehood ratio test, one way is to run another model with just the `envp` variable and use the `lrtest` function.
+
+Now we can look at the predicted number of policy changes when international constraints are (or aren't) present and over the range of veto players.
+
+```{r}
+#Range for scenario varying veto players
+s.range <- sort(cap$envp)
+
+#Scenario 1: low constraints
+scen1 <- data.frame(1, envp=s.range, loconst=1)
+scen1.pred <- predict(mp.full, newdata=scen1, type = "response", se.fit=TRUE) %>% data.frame()
+lo.1 <- scen1.pred$fit-1.96*scen1.pred$se.fit
+hi.1 <- scen1.pred$fit+1.96*scen1.pred$se.fit
+scen1.data <- data.frame(pred=scen1.pred$fit, lo=lo.1, hi=hi.1, s.range, constraint=as.factor(scen1$loconst))
+
+#Scenario 2: high constraints
+scen2 <- data.frame(1, envp=s.range, loconst=0)
+scen2.pred <- predict(mp.full, newdata=scen2, type="response", se.fit=TRUE) %>% data.frame()
+lo.2 <- scen2.pred$fit-1.96*scen2.pred$se.fit
+hi.2 <- scen2.pred$fit+1.96*scen2.pred$se.fit
+scen2.data <- data.frame(pred=scen2.pred$fit, lo=lo.2, hi=hi.2, s.range, constraint=as.factor(scen2$loconst))
+
+#Combine and plot
+scen.data <- data.frame(rbind(scen1.data, scen2.data))
+
+scen.plot <- ggplot(scen.data, aes(x=s.range, y=pred, ymin=lo, ymax=hi, color=factor(constraint))) + 
+  geom_line(aes(colour=factor(constraint)),size=1) + 
+  geom_ribbon(aes(ymin=lo, ymax=hi, fill=factor(constraint)), alpha=0.2)+
+  scale_y_continuous(name="Expected Number of Capital Control Policies",expand=c(0,0)) + 
+  scale_x_continuous(name="Number of Veto Players", expand=c(0,0)) +
+  scale_fill_discrete(name="International Constraints", labels=c("High Constraints", "Low Constraints")) +
+  scale_colour_discrete(name="International Constraints", labels=c("High Constraints", "Low Constraints"))
+
+scen.plot <- scen.plot + theme(legend.position='top', legend.title=element_blank(), axis.ticks=element_blank(), panel.border=element_blank(), axis.title.y=element_text(vjust=2))
+
+scen.plot
+```
+
+What about a negative Binomial model? The data surely calls for one (via cursory look at mean and variance, and dispersion tests).
+
+So does a negative Binomial model change anything? You can run a likelihood ratio test between our full Poisson model and the exact model formula using a negative Binomial model. 
+
+```{r}
+mnb.full <- glm.nb(modForm, data=cap)
+
+#Two tests, odTest or lrtest
+odTest(mnb.full, alpha=0.05) #"overdispersion" test
+lrtest(mp.full, mnb.full)
+```
+
+It does look like we need to use a negative Binomial model. The rest of the homework is just going through the same procedure as above, but for the NB model, and comparing the two. Some of the relationships will change.
+
+
+
+## Hierarchical Models
+
+We gon' need some data. We'll use data from the American National Election Study.
+
+Here are the variables we'll use:
+
+`partyid7`: Party identification (Left-right, 7pt. Scale) 
+`state`: State 
+`age`: Age in years 
+`female`: Female dummy 
+`black`: Black dummy 
+`year`: Year of survey 
+`married`: Married dummy 
+`educ`: Educational attainment  
+`urban`: 1=urban, 2=suburban, 3=rural
+`union`: Union member dummy
+`south`: Southern state dummy 
+
+```{r}
+load(paste0(labPath, "partyid.RData")); pid <- partyid; rm(partyid)
+pid$union <- 2 - pid$union
+
+```
+
+Our DV for this tutorial will be party ID, which is on a 1 to 7 scale, with 1 being the strongest Democrats and 7 being the strongest Republicans.  A natural hierarchy here is individuals within years. There are 15 iterations of the survey, every two years from 1972 to 2000. 
+
+Let's look at a fully pooled model (no fixed or random effects). Also, here's a good discussion of why hierarchical models might be a good idea (http://andrewgelman.com/2011/10/15/the-bias-variance-tradeoff/).
+
+We'll use `urban`, `union`, `south`, `female`, `age`, `south`, and `black` as predictors.
+
+```{r}
+m.pooled <- lm(partyid7 ~ urban + union + south + female + age + south +
+                 black, data=pid)
+summary(m.pooled)
+```
+
+Things are significant. That's good, it will allow us to see changes in the model. See any weird relationships?
+
+What happens if we unpool the data and look at a model with years as constants?
+
+```{r}
+m.unpooled <- lm(partyid7 ~ urban + union + south + female + age + south +
+                 black + factor(year) - 1, data=pid)
+summary(m.unpooled)
+```
+
+Nothing really changed, but we can see that we explained a ton more of the variance. Obviously, there is something about including the years that matters. Now let's allow the years to have slopes and not just be constants, using the `lme4` package.
+
+First, we'll just use a simple model with no predictors, and only the year random effects, and we can compare it to a fixed effects model with only the year fixed effects.
+
+```{r}
+m0 <- lmer(partyid7 ~ 1 + (1 | year), data=pid)
+summary(m0)
+
+m0.fe <- lm(partyid7 ~ factor(year), data=pid)
+summary(m0.fe)
+
+print(paste("Random Effects AIC =", AIC(m0)))
+print(paste("Fixed Effects AIC =", AIC(m0.fe))) #In this case, really no difference whatsoever.
+```
+
+Now let's add a single explanatory variable, let's say `female`.
+
+```{r}
+m1 <- lmer(partyid7 ~ 1 + female + (1 | year), data=pid)
+summary(m1)
+```
+
+How can we pull fixed or random effects from the model?
+
+```{r}
+fixef(m1)
+coef(m1)
+ranef(m1)
+```
+
+So for a woman in 1996 we have $PID = 3.809 - 0.195X$. Also, the relationship between the `coef`, `fixef`, and `ranef`, is:
+
+```{r}
+identical( coef(m1)$year[1,1], 
+           as.numeric( fixef(m1)[1] + ranef(m1)$year[1,1] ) )
+#What does this mean?
+```
+
+We can also use canned functions from the `arm` package (`se.fixef` and `se.ranef`) to compute standard errors and confidence intervals. Here we'll look at the 95% confidence interval for the `female` variable.
+
+```{r}
+fixef(m1)["female"] + qnorm(c(0.025, 0.975))*se.fixef(m1)["female"]
+```
+
+We can also look at the 95% confidence intervals for the random effects, like for the year 1972:
+
+```{r}
+#Confidence interval for intercept
+coef(m1)$year[1,1] + qnorm(c(0.025,0.975))*se.ranef(m1)$year[1]
+#What does this mean?
+
+
+#Confidence interval for intercept deviation from common mean
+ranef(m1)$year[1,] + qnorm(c(0.025, 0.975))*se.ranef(m1)$year[1]
+#What does this mean?
+```
+
+Next week we'll pick up with...the full model! And prediction!
+
+

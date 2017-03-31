@@ -139,7 +139,7 @@ Another tool for imputing missing data is `sbgcop`, developed by Peter Hoff (of 
 
 ```{r message=FALSE, tidy=TRUE}
 
-apsrSbgcop <- sbgcop.mcmc(Y=apsrMiss, nsamp=5000, seed=6886, verb=FALSE)
+apsrSbgcop <- sbgcop.mcmc(Y=apsrMiss, nsamp=5000, seed=6886, verb=F)
 
 ```
 

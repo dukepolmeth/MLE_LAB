@@ -13,7 +13,7 @@ loadPkg <- function(toLoad){
 pkgs <- c("ggplot2", 'lmtest', 'car', 'gap', 'sandwich', 'reshape2', 'foreign', 'MASS', 'boot', 
           'separationplot', 'WDI', 'countrycode', 'RColorBrewer', 'cshapes', 'ape', 'grid', 
           'spdep', 'magrittr', 'pscl', 'rms', 'nnet', 'mlogit', 'AER', 'Amelia', 'sbgcop', 'reporttools',
-          'mice', 'missForest', 'VIM', 'stargazer')
+          'mice', 'missForest', 'VIM', 'stargazer', 'lme4', 'arm')
 loadPkg(pkgs)
 
 # Set a theme for gg
@@ -25,5 +25,5 @@ num <- function(x){ as.numeric(char(x)) }
 
 ## Relevant paths
 if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
-  labPath <- paste0(path.expand("~"), "MLE_LAB/Lab 10/")
+  labPath <- paste0(path.expand("~"), "MLE_LAB/Lab 11/")
 }
