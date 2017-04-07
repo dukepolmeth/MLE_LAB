@@ -61,7 +61,11 @@ load(paste0(labPath, "partyid.RData")); pid <- partyid; rm(partyid)
 pid$union <- 2 - pid$union #recode to [0,1]
 #Alternatively, the recode function ('car' package) is very useful, particularly for more complicated variables
 pid$union <- recode(pid$union, "2=0")
+
+pid$party <- recode(pid$partyid7, "1='Democrat'; 2='Democrat'; 3='Democrat'; 5='Republican'; 6='Republican'; 7='Republican'; else='Independent'")
+
 pid90 <- pid[pid$year >= 1990,] #So we don't run into those weird southern Dems from the 1970s
+
 head(pid)
 
 ```
@@ -113,7 +117,6 @@ Are we using any single one of these definitions? Are they mutually exclusive? T
 Our random intercept model above ($m0$) is a random intercept model. This means that we estimate a different intercept for each year, but that each of these is a parallel line. Now, we'll allow there to be a different slope for each year. 
 
 ```{r}
-pid$female <- as.factor(pid$female)
 m.slope <- lmer(partyid7 ~ 1 + south + (south | year), data=pid)
 summary(m.slope)
 ```
@@ -123,7 +126,8 @@ We ran into a strange phenomenon last time. Because our data span 1972-2000, we 
 I found an extremely cool package that I've been playing with, and now I'm going to show it to you. It's the `effects` package, which creates objects for constructing effects plots. It does a lot of what we've been doing for prediction for us.
 
 ```{r}
-m.slope2 <- lmer(partyid7 ~ 1 + south + female + (south | year), data=pid)
+pid$female <- as.factor(pid$female)
+m.slope2 <- lmer(partyid7 ~ 1 + south + female +  (south | year), data=pid)
 plot(Effect(c("south", "female"), m.slope2))
 ```
 
@@ -135,22 +139,64 @@ Now we'll do another group activity, and then we'll build a plot of the random s
 
 ### Activity
 
-Pick a year of ANES data. Compute what the model thinks that the party ID value will be for each of the four combinations of `south` and `female` (southern female, southern male, nonsouthern female, nonsouthern male). HINT: Look at the lecture slides that were distributed with this code, a bit more than halfway down. 
+Pick a year of ANES data. Compute what the model thinks that the party ID value will be for southern and nonsouthern individuals. HINT: Look at the lecture slides that were distributed with this code, a bit more than halfway down. 
 
 
-Here's the example I did:
+Here's the example I did, for 1972. First, here is the estimate for party ID based on the model.
 
-WILL FILL IN TOMORROW DURING CLASS
+$$\hat{y}_j = (\mu_{\alpha} + \epsilon_{j}) + (\mu_{\beta} + \xi_{j})x$$
 
+```{r}
+#Year 1972
+sum(fixef(m.slope) + ranef(m.slope)[[1]][1,]) #southern
+sum(fixef(m.slope)[1] + ranef(m.slope)[[1]][1,1]) #nonsouthern
+
+
+# All years
+yhats <- matrix(data=NA, ncol = 2, nrow=length(unique(pid$year)))
+colnames(yhats) <- c("Nonsouthern", "Southern")
+rownames(yhats) <- sort(unique(pid$year))
+yhats
+
+for(i in 1:length(unique(pid$year))){
+  yhats[i,1] <- sum(fixef(m.slope) + ranef(m.slope)[[1]][i,])
+  yhats[i,2] <- sum(fixef(m.slope)[1] + ranef(m.slope)[[1]][i,1])
+}
+yhats
+```
 
 ### Plotting random intercepts and slopes
 
-Okay, now that we've figured out how to compute estimated values of party ID based on different levels of our predictor variables `south` and `female`, let's construct a plot of the random slopes and intercepts. 
+Okay, now that we've figured out how to compute estimated values of party ID based on different levels of our predictor variable `south`, let's construct a plot of the random slopes. 
+```{r}
 
+# Extract fixed effects
+a <- fixef(m.slope)
+south.fe <- a[2]
 
-WILL FILL IN TOMORROW DURING CLASS
+# Extract random effects
+b <- ranef(m.slope, condVar=TRUE)
+south.res <- b[[1]][2]
 
+# Extract the variances of the random effects
+qq <- attr(b[[1]], "postVar")
+e <- (sqrt(qq)) 
+e <- e[2,2,] #here we want to access `south`, which is stored in column 2 in b[[1]], that's why I use the [2,2,]
 
+# Calculate CI's
+
+lo <- (south.res+south.fe)-(e*2)
+mu <- (south.res+south.fe)
+hi <- (south.res+south.fe)+(e*2)
+
+#Plot betas and CIs
+dotchart(mu$south, labels = rownames(mu), cex = 0.5,
+         xlim = c(-0.5,0), xlab = "Coefficient for Southern")
+for (i in 1:nrow(mu)){
+  lines(x = c(lo[i,1], hi[i,1]), y = c(i,i)) 
+}
+
+```
 
 ### Prediction
 
@@ -178,7 +224,14 @@ lines(density(pred2), lwd=2, col="red")
 legend("topleft", c("Southern", "Nonsouthern"), fill=c("Blue", "Red"), bty="n")
 ```
 
+```{r}
+plot(sort(unique(pid$year)), pred1, col="blue",pch=19, ylim=c(3,4), ylab="Predicted Party ID", xlab="Year")
+points(sort(unique(pid$year)), pred2, col="red", pch=19)
+legend("bottomleft", c("Southern", "Nonsouthern"), fill=c("Blue", "Red"), bty="n")
+abline(lm(pred1~sort(unique(pid$year))), col="blue")
+abline(lm(pred2~sort(unique(pid$year))), col="red")
 
+```
 Are we really taking uncertainty into account here? Are there easy ways to do this?
 
 
