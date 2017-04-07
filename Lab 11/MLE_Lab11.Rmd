@@ -129,7 +129,7 @@ hi.2 <- scen2.pred$fit+1.96*scen2.pred$se.fit
 scen2.data <- data.frame(pred=scen2.pred$fit, lo=lo.2, hi=hi.2, s.range, constraint=as.factor(scen2$loconst))
 
 #Combine and plot
-scen.data <- data.frame(rbind(scen1.data, scen2.data))
+scen.data <- rbind(scen1.data, scen2.data)
 
 scen.plot <- ggplot(scen.data, aes(x=s.range, y=pred, ymin=lo, ymax=hi, color=factor(constraint))) + 
   geom_line(aes(colour=factor(constraint)),size=1) + 
@@ -191,7 +191,7 @@ Let's look at a fully pooled model (no fixed or random effects). Also, here's a 
 We'll use `urban`, `union`, `south`, `female`, `age`, `south`, and `black` as predictors.
 
 ```{r}
-m.pooled <- lm(partyid7 ~ urban + union + south + female + age + south +
+m.pooled <- lm(partyid7 ~ urban + union + south + female + age + 
                  black, data=pid)
 summary(m.pooled)
 ```
@@ -201,8 +201,7 @@ Things are significant. That's good, it will allow us to see changes in the mode
 What happens if we unpool the data and look at a model with years as constants?
 
 ```{r}
-m.unpooled <- lm(partyid7 ~ urban + union + south + female + age + south +
-                 black + factor(year) - 1, data=pid)
+m.unpooled <- lm(partyid7 ~ urban + union + south + female + age + black + factor(year) - 1, data=pid)
 summary(m.unpooled)
 ```
 
@@ -236,7 +235,7 @@ coef(m1)
 ranef(m1)
 ```
 
-So for a woman in 1996 we have $PID = 3.809 - 0.195X$. Also, the relationship between the `coef`, `fixef`, and `ranef`, is:
+So for a woman in 1972 we have $PID = 3.809 - 0.195X$. Also, the relationship between the `coef`, `fixef`, and `ranef`, is:
 
 ```{r}
 identical( coef(m1)$year[1,1], 
