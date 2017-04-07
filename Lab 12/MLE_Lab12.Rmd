@@ -1,0 +1,184 @@
+---
+title: "MLE - Lab 12"
+author: "Andy Ballard"
+date: "April 7, 2017"
+output: pdf_document
+---
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#First, let's set up our workspace
+if((Sys.info()['user']=='aob5' | Sys.info()['user']=='Andy')){
+  source(paste0(path.expand("~"), "/MLE_LAB/Lab 12/setup.R"))
+}
+
+set.seed(6886)
+```
+
+## Today
+
+* Homework 5
+* More Hierarchical Models
+
+
+
+## Homework 5
+
+You'll have two datasets to work with, each of which will ask you to do things with hierarchical models. The first examines findings from Steenbergen and Jones (AJPS 1996) who model support for the EU as a function of individual- and country-level variables. 
+
+```{r}
+load(paste0(labPath, "EUsupport.RData")); eu <- EUsupport; rm(EUsupport)
+head(eu)
+
+```
+
+The second dataset describes contraception usage in Bangladesh, from the Bangladesh fertility survey in 1989. You'll model the use of contraception with a hierarchical model, where individuals are nested within districts. 
+
+```{r}
+load(paste0(labPath, "contraception.RData"))
+head(contra)
+```
+
+
+## Hierarchical Models
+
+We'll use the same data as last week, from the American National Election Study (1990-2000). To refresh your memory, here are the variables:
+
+`partyid7`: Party identification (Left-right, 7pt. Scale; Strong Dem = 1) 
+`state`: State 
+`age`: Age in years 
+`female`: Female dummy 
+`black`: Black dummy 
+`year`: Year of survey 
+`married`: Married dummy 
+`educ`: Educational attainment (1-4) 
+`urban`: 1=urban, 2=suburban, 3=rural
+`union`: Union member dummy
+`south`: Southern state dummy
+
+```{r}
+load(paste0(labPath, "partyid.RData")); pid <- partyid; rm(partyid)
+pid$union <- 2 - pid$union #recode to [0,1]
+#Alternatively, the recode function ('car' package) is very useful, particularly for more complicated variables
+pid$union <- recode(pid$union, "2=0")
+pid90 <- pid[pid$year >= 1990,] #So we don't run into those weird southern Dems from the 1970s
+head(pid)
+
+```
+
+
+We even ran a model predicting party ID. Well, we ran a few models. First, we had a pooled model with no inferred hierarchy.
+
+```{r}
+m.pooled <- lm(partyid7 ~ urban + union + south + female + age + 
+                 black, data=pid90)
+summary(m.pooled)
+```
+
+Then we ran a model with fixed effects for year.
+
+```{r}
+m.unpooled <- lm(partyid7 ~ urban + union + south + female + age + black + factor(year) - 1, data=pid90)
+summary(m.unpooled)
+```
+
+Then we ran a random intercept model for individuals within years. 
+
+```{r}
+m0 <- lmer(partyid7 ~ 1 + south + (1 | year), data=pid)
+summary(m0)
+```
+
+What do we mean by the difference between random effects and fixed effects? Turns out, there are lots of different definitions. Check out this piece by Andrew Gelman (http://www.stat.columbia.edu/~gelman/research/published/AOS259.pdf) about a bunch of different defintions:
+
+1. Fixed effects are constant across individuals, and random effects vary. For example, in a growth study, a model with random intercepts $a_i$ and fixed slope $b$ corresponds to parallel lines for different individuals $i$, or the model $y_{it}=a_i+bt$. Kreft and De Leeuw (1998) thus distinguish between fixed and random coefficients.
+
+2. Effects are fixed if they are interesting in themselves or random if there is interest in the underlying population. Searle, Casella, and McCulloch (1992, Section 1.4) explore this distinction in depth.
+
+3. "When a sample exhausts the population, the corresponding variable is fixed; when the sample is a small (i.e., negligible) part of the population the corresponding variable is random." (Green and Tukey, 1960)
+
+4. "If an effect is assumed to be a realized value of a random variable, it is called a random effect." (LaMotte, 1983)
+
+5. Fixed effects are estimated using least squares (or, more generally, maximum likelihood) and random effects are estimated with shrinkage ("linear unbiased prediction" in the terminology of Robinson, 1991). This definition is standard in the multilevel modeling literature (see, for example, Snijders and Bosker, 1999, Section 4.2) and in econometrics.
+
+
+### Activity
+
+Are we using any single one of these definitions? Are they mutually exclusive? Take five minutes and talk about this with your neighbors. How do you think of fixed/random effects, how have they been taught in this course?
+
+
+
+### Random Slope Models
+
+Our random intercept model above ($m0$) is a random intercept model. This means that we estimate a different intercept for each year, but that each of these is a parallel line. Now, we'll allow there to be a different slope for each year. 
+
+```{r}
+pid$female <- as.factor(pid$female)
+m.slope <- lmer(partyid7 ~ 1 + south + (south | year), data=pid)
+summary(m.slope)
+```
+
+We ran into a strange phenomenon last time. Because our data span 1972-2000, we captured a transitional period in American party politics and the effect of the `south` variable in the pooled model is very unlike we would see today. So the `m.slope` model above allows for random slopes for the `south` variable for each year. This way, we can see how things change over time.
+
+I found an extremely cool package that I've been playing with, and now I'm going to show it to you. It's the `effects` package, which creates objects for constructing effects plots. It does a lot of what we've been doing for prediction for us.
+
+```{r}
+m.slope2 <- lmer(partyid7 ~ 1 + south + female + (south | year), data=pid)
+plot(Effect(c("south", "female"), m.slope2))
+```
+
+Whoa, huh? I just found this last night, so I haven't done a ton of exploring. But if the options are fairly flexible you could do all sorts of cool things with this.
+
+As is, it doesn't help us a ton. This is just the fixed effect, but we want to look at the random effects and the random slopes. 
+
+Now we'll do another group activity, and then we'll build a plot of the random slopes and intercepts together. 
+
+### Activity
+
+Pick a year of ANES data. Compute what the model thinks that the party ID value will be for each of the four combinations of `south` and `female` (southern female, southern male, nonsouthern female, nonsouthern male). HINT: Look at the lecture slides that were distributed with this code, a bit more than halfway down. 
+
+
+Here's the example I did:
+
+WILL FILL IN TOMORROW DURING CLASS
+
+
+### Plotting random intercepts and slopes
+
+Okay, now that we've figured out how to compute estimated values of party ID based on different levels of our predictor variables `south` and `female`, let's construct a plot of the random slopes and intercepts. 
+
+
+WILL FILL IN TOMORROW DURING CLASS
+
+
+
+### Prediction
+
+Let's look at some predicted values of party ID, based on our random slope model. 
+
+```{r}
+scen1 <- data.frame(partyid7=seq(min(pid$partyid7), 
+                                 max(pid$partyid7), 
+                                 length.out=length(unique(pid$year))),
+                    south=0, 
+                    year=sort(unique(pid$year)))
+pred1 <- predict(m.slope, newdata=scen1)
+
+
+scen2 <- data.frame(partyid7=seq(min(pid$partyid7), 
+                                 max(pid$partyid7), 
+                                 length.out=length(unique(pid$year))),
+                    south=1, 
+                    year=sort(unique(pid$year)))
+pred2 <- predict(m.slope, newdata=scen2)
+
+plot(density(pred1), lwd=2, col="blue", main="Substantive Effect of 'Southern'", 
+     xlab="Predicted Party ID", xlim=c(3,4), ylim=c(0,20), ylab="", yaxt="n")
+lines(density(pred2), lwd=2, col="red")
+legend("topleft", c("Southern", "Nonsouthern"), fill=c("Blue", "Red"), bty="n")
+```
+
+
+Are we really taking uncertainty into account here? Are there easy ways to do this?
+
+
