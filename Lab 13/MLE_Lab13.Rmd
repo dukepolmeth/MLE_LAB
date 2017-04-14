@@ -25,10 +25,10 @@ set.seed(6886)
 
 We'll muddle around in the real world for a bit before going off into web data land. We'll do an example of a mixed effects logistic regression model with a sort of data we don't often see. To run these models, you go through nearly the same process as we've been doing, but 
 
-A large HMO wants to know what patient and physician factors are most related to whether a patient's lung cancer goes into remission after treatment as part of a larger study of treatment outcomes and quality of life in patients with lunger cancer.
+A large HMO wants to know what patient and physician factors are most related to whether a patient's lung cancer goes into remission after treatment as part of a larger study of treatment outcomes and quality of life in patients with lung cancer.
 
 ```{r}
-hdp <- read.csv(paste0(labPath, "hdp.csv"))
+hdp <- read.csv(paste0(labPath, "hdp.csv"), stringsAsFactors = F)
 hdp <- within(hdp, {
   Married <- factor(Married, levels = 0:1, labels = c("no", "yes"))
   DID <- factor(DID)
