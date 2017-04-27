@@ -23,7 +23,7 @@ set.seed(0523)
 
 ## Housekeeping
 
-You'll get your paper 2 grades and Homework 5 grades this weekend, at which point you'll have all your grades for the semester, save your final paper. Your final paper is due two weeks from today, Friday, May 1st at 1pm. I will hold office hours as usual (or with notice of changes) until then.
+You'll get your paper 2 grades and Homework 5 grades this weekend, at which point you'll have all your grades for the semester, save your final paper. Your final paper is due two weeks from today, Friday, May 5th at 1pm. I will hold office hours as usual (or with notice of changes) until then.
 
 For the final paper: please format it as a paper. These labs are in an informal style that is suitable for class, but NOT for a paper. That is, your papers should have prose, and not just text comments in between snippets of code. If you do use an .Rmd to write your papers, please turn in both the .Rmd file and a .pdf, where the code in the .pdf is hidden. If you use this format, please be sure to format tables and figures properly, so that the axes and labels are easy to read and not just the names of variable objects in `R`. 
 
@@ -82,7 +82,7 @@ There are a number of options here, mostly with the `model` argument in the `plm
 We can pull out fixed effects easily, but only for 'within' models. However, since we're currently using each individual as the ID variable, we'd get fixed effects for all 532 people. We could switch this around and look at days, but that doesn't seem as reasonable given the structure of the data.
 
 ```{r, eval=FALSE}
-m.fe <- plm(lnhr ~ lnwg, data=pdata, model='within')
+m.fe <- plm(lnhr ~ lnwg + kids + disab + ageh, data=pdata, model='within')
 summary(fixef(m.fe))
 ```
 
@@ -114,7 +114,8 @@ test <- fish[fish$rand==2,]
 dv <- 'fhrev'
 ivs <- c('muslim', 'income', 'elf', 'growth', 'britcol', 'postcom', 'opec')
 modForm <- formula(paste0( dv, ' ~ ', paste(ivs, collapse=' + ') ))
-mod <- lm(modForm, data=train)
+summary(mod <- lm(modForm, data=train))
+summary(mod.full <- lm(modForm, data=fish))
 ```
 
 Now we have a model for our training set. Note that in order to split the data up, I used a random procedure that should approximately split the data in half. Also, because we're running multiple models with the same formula on different data, it may be a good idea to use this stacked model formula process that we've done a times.
@@ -173,7 +174,7 @@ ggData <- data.frame(
 names(ggData) <- c('var', 'est', 'stderr', 'rand')
 
 # Convert relev columns to numeric
-for(ii in 2:3){ ggData[,ii] <- as.numeric(ggData[,ii]) }
+for(ii in 2:3){ ggData[,ii] <- num(ggData[,ii]) }
 
 # Lets get the 90 and 95 perc conf ints for the estimates
 ggData$hi95 <- ggData$est + qnorm(.975)*ggData$stderr
@@ -229,7 +230,7 @@ for(ii in 1:k){
 perf
 ```
 
-We can plot our RMSEs for the training sets as well.
+We can plot our coefficients for the training sets as well.
 
 ```{r}
 # organize our data
